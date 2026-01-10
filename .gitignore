@@ -1,3 +1,13 @@
+#######################
+### FILES & FOLDERS ###
+#######################
+
+submission
+
+#####
+# R #
+#####
+
 # History files
 .Rhistory
 .Rapp.history
