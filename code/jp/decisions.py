@@ -44,6 +44,7 @@ def create_counterfactuals(row):
     else:
         score["RefScoreDiff"] -= 1
     score["EndID"] += 1
+    score["EndsRemaining"] -= 1
     score["RefShotsRemaining"] = 5
     score["OppShotsRemaining"] = 5
     score["PowerPlay"] = 0
@@ -57,7 +58,7 @@ def create_counterfactuals(row):
         score["OppClosestDist"] = 150
         score["RefStonesInHouse"] = 0
         score["OppStonesInHouse"] = 1
-        score["StonesCloserDiff"] = 0
+        score["RefStonesCloserDiff"] = -1
         score["StonesCrowdedNearButton"] = 1
         score["StonesMediumCrowdedNearButton"] = 1
     else:
@@ -65,7 +66,7 @@ def create_counterfactuals(row):
         score["OppClosestDist"] = 1116
         score["RefStonesInHouse"] = 1
         score["OppStonesInHouse"] = 0
-        score["StonesCloserDiff"] = 1
+        score["RefStonesCloserDiff"] = 1
         score["StonesCrowdedNearButton"] = 1
         score["StonesMediumCrowdedNearButton"] = 1
     
@@ -74,6 +75,7 @@ def create_counterfactuals(row):
     punt = base.copy()
     punt["RefHasHammer"] = base["RefHasHammer"]
     punt["EndID"] += 1
+    punt["EndsRemaining"] -= 1
     punt["RefShotsRemaining"] = 5
     punt["OppShotsRemaining"] = 5
     punt["PowerPlay"] = 0
@@ -87,7 +89,7 @@ def create_counterfactuals(row):
         punt["OppClosestDist"] = 1116
         punt["RefStonesInHouse"] = 1
         punt["OppStonesInHouse"] = 0
-        punt["StonesCloserDiff"] = 1
+        punt["RefStonesCloserDiff"] = 1
         punt["StonesCrowdedNearButton"] = 1
         punt["StonesMediumCrowdedNearButton"] = 1
     else:
@@ -95,7 +97,7 @@ def create_counterfactuals(row):
         punt["OppClosestDist"] = 150
         punt["RefStonesInHouse"] = 0
         punt["OppStonesInHouse"] = 1
-        punt["StonesCloserDiff"] = 0
+        punt["RefStonesCloserDiff"] = -1
         punt["StonesCrowdedNearButton"] = 1
         punt["StonesMediumCrowdedNearButton"] = 1
     
