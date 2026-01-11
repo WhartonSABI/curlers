@@ -218,7 +218,7 @@ def add_power_play_features(nnshots):
     nnshots = nnshots.merge(pp_used_end, on="GameTeamID", how="left")
     nnshots["HasUsedPowerPlay"] = (
         (nnshots["PowerPlayUsedEnd"].notna()) &
-        (nnshots["EndID"] > nnshots["PowerPlayUsedEnd"])
+        (nnshots["EndID"] >= nnshots["PowerPlayUsedEnd"])
     ).astype(int)
     
     return nnshots
