@@ -243,7 +243,7 @@ def plot_win_probability(matchID, df, model, le_ref_team, le_opp_team, save_path
         plt.show()
 
 
-def get_decision_points2(df):
+def get_decision_points(df):
     """
     Select decision points where the hammer team has exactly
     one shot remaining and the non-hammer team has zero.
@@ -267,7 +267,7 @@ def get_decision_points2(df):
     ].copy()
 
 
-def create_counterfactuals2(row):
+def create_counterfactuals(row):
     """Create score and punt counterfactual scenarios."""
     base = row.copy()
     score = base.copy()
@@ -344,7 +344,7 @@ def compute_delta_wp(df, model, le_ref_team, le_opp_team):
     """
     rows = []
     for _, row in df.iterrows():
-        score_row, punt_row = create_counterfactuals2(row)
+        score_row, punt_row = create_counterfactuals(row)
         
         score_df = pd.DataFrame([score_row])
         punt_df = pd.DataFrame([punt_row])

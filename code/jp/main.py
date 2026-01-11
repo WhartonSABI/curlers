@@ -16,7 +16,7 @@ from results import (
     evaluate_model,
     plot_calibration_curve,
     plot_feature_importance,
-    get_decision_points2,
+    get_decision_points,
     compute_delta_wp,
     normalize_delta_wp,
     aggregate_decisions,
@@ -90,7 +90,7 @@ def main():
     
     # Decision analysis
     print("  - Decision analysis...")
-    decision_rows_df = get_decision_points2(nnshots)
+    decision_rows_df = get_decision_points(nnshots)
     print(f"    Found {len(decision_rows_df)} decision points")
     
     decision_win_probs = compute_delta_wp(decision_rows_df, model, le_ref_team, le_opp_team)
