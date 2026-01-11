@@ -2,6 +2,10 @@
 ### FILES & FOLDERS ###
 #######################
 
+# private data
+data
+
+# submission materials
 submission
 
 #####
