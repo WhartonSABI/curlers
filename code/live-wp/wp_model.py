@@ -4,14 +4,14 @@ Model training for curling win probability prediction.
 
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import LabelEncoder
 from sklearn.calibration import CalibratedClassifierCV
 from xgboost import XGBClassifier
 
 
 FEATURE_COLS = [
-    "EndsRemaining", "EarlyGameEnd", "RefTeamID", "OppTeamID", 
+    "EndsRemaining", "EarlyGameEnd", 
     "RefHasUsedPowerPlay", "OppHasUsedPowerPlay", 
     "RefShotsRemaining", "OppShotsRemaining", 
     "RefHasHammer", "RefStonesInHouse", "OppStonesInHouse", 
@@ -23,43 +23,30 @@ TARGET_COL = "RefTeamWon"
 
 def prepare_features(df, le_ref_team=None, le_opp_team=None, fit_encoders=True):
     """
-    Prepare feature matrices with label encoding for categorical features.
+    Prepare feature matrices.
     
     Parameters
     ----------
     df : pd.DataFrame
         Dataframe with features
     le_ref_team : LabelEncoder, optional
-        Pre-fitted encoder for RefTeamID
+        Unused (kept for compatibility)
     le_opp_team : LabelEncoder, optional
-        Pre-fitted encoder for OppTeamID
+        Unused (kept for compatibility)
     fit_encoders : bool, default=True
-        Whether to fit new encoders or use provided ones
+        Unused (kept for compatibility)
     
     Returns
     -------
     X : pd.DataFrame
         Feature matrix
-    le_ref_team : LabelEncoder
-        Fitted encoder for RefTeamID
-    le_opp_team : LabelEncoder
-        Fitted encoder for OppTeamID
+    le_ref_team : None
+        Unused (kept for compatibility)
+    le_opp_team : None
+        Unused (kept for compatibility)
     """
     X = df[FEATURE_COLS].copy()
-    
-    if fit_encoders or le_ref_team is None:
-        le_ref_team = LabelEncoder()
-        X["RefTeamID"] = le_ref_team.fit_transform(X["RefTeamID"].astype(str))
-    else:
-        X["RefTeamID"] = le_ref_team.transform(X["RefTeamID"].astype(str))
-    
-    if fit_encoders or le_opp_team is None:
-        le_opp_team = LabelEncoder()
-        X["OppTeamID"] = le_opp_team.fit_transform(X["OppTeamID"].astype(str))
-    else:
-        X["OppTeamID"] = le_opp_team.transform(X["OppTeamID"].astype(str))
-    
-    return X, le_ref_team, le_opp_team
+    return X, None, None
 
 
 def train_model(
@@ -116,12 +103,16 @@ def train_model(
         Training target
     y_val : pd.Series
         Validation target
-    le_ref_team : LabelEncoder
-        Fitted encoder for RefTeamID
-    le_opp_team : LabelEncoder
-        Fitted encoder for OppTeamID
+    le_ref_team : None
+        Unused (kept for compatibility)
+    le_opp_team : None
+        Unused (kept for compatibility)
     """
-    train_df, val_df = train_test_split(nnshots, test_size=test_size, random_state=random_state)
+    # Use grouped split by MatchID to avoid data leakage (shots from same match in both train/val)
+    gss = GroupShuffleSplit(n_splits=1, test_size=test_size, random_state=random_state)
+    train_idx, val_idx = next(gss.split(nnshots, groups=nnshots["MatchID"]))
+    train_df = nnshots.iloc[train_idx].copy()
+    val_df = nnshots.iloc[val_idx].copy()
     
     X_train, le_ref_team, le_opp_team = prepare_features(train_df, fit_encoders=True)
     X_val, _, _ = prepare_features(val_df, le_ref_team=le_ref_team, le_opp_team=le_opp_team, fit_encoders=False)

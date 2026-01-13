@@ -1,54 +1,185 @@
 """
-Results analysis and visualization for curling win probability model.
+Results analysis and visualization for EP (Expected Points) model.
 """
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import brier_score_loss, log_loss, accuracy_score
+from sklearn.metrics import brier_score_loss, log_loss, accuracy_score, confusion_matrix, classification_report
 from sklearn.calibration import calibration_curve
 
-from model import FEATURE_COLS, prepare_features
+from ep_end import EP_FEATURE_COLS, prepare_end_level_features
 
 
-def plot_feature_importance(model, save_path=None):
+def evaluate_ep_model(model, X_val, y_val, differential_classes, class_to_diff):
     """
-    Plot feature importance for XGBoost model (works with calibrated or uncalibrated models).
+    Evaluate EP distribution model performance.
     
     Parameters
     ----------
-    model : XGBClassifier or CalibratedClassifierCV
-        Trained XGBoost model (calibrated or uncalibrated)
-    save_path : str, optional
-        Path to save the plot. If None, plot is shown instead.
+    model : XGBClassifier
+        Trained multiclass classifier
+    X_val : pd.DataFrame
+        Validation features
+    y_val : pd.Series
+        Validation class labels (0-indexed)
+    differential_classes : np.ndarray
+        Array of differential values
+    class_to_diff : dict
+        Mapping from class index to differential value
     
     Returns
     -------
-    pd.DataFrame
-        Dataframe with feature names and importance values
+    dict
+        Dictionary with accuracy, log_loss, and expected value error
     """
-    # Get feature importance (handle both calibrated and uncalibrated models)
-    if hasattr(model, 'calibrated_classifiers_'):
-        # Calibrated model - get importance from base estimator in first calibrated classifier
-        base_model = model.calibrated_classifiers_[0].estimator
-        importance = base_model.feature_importances_
-    else:
-        # Uncalibrated model
-        importance = model.feature_importances_
+    # Predict probabilities
+    val_probs = model.predict_proba(X_val)
+    val_pred = model.predict(X_val)
     
-    # Create dataframe
+    # Convert class labels back to differentials
+    val_pred_diffs = pd.Series(val_pred).map(class_to_diff).values
+    val_true_diffs = pd.Series(y_val).map(class_to_diff).values
+    
+    # Accuracy (exact match)
+    accuracy = accuracy_score(y_val, val_pred)
+    
+    # Log loss
+    logloss = log_loss(y_val, val_probs, labels=range(len(differential_classes)))
+    
+    # Expected value error (mean absolute error in expected differential)
+    expected_pred = np.sum(val_probs * np.array([class_to_diff[i] for i in range(len(differential_classes))]), axis=1)
+    expected_true = val_true_diffs
+    mae_expected = np.mean(np.abs(expected_pred - expected_true))
+    
+    return {
+        "accuracy": accuracy,
+        "logloss": logloss,
+        "mae_expected": mae_expected
+    }
+
+
+def plot_ep_confusion_matrix(model, X_val, y_val, differential_classes, class_to_diff, save_path=None):
+    """
+    Plot confusion matrix for EP distribution model.
+    
+    Parameters
+    ----------
+    model : XGBClassifier
+        Trained multiclass classifier
+    X_val : pd.DataFrame
+        Validation features
+    y_val : pd.Series
+        Validation class labels
+    differential_classes : np.ndarray
+        Array of differential values
+    class_to_diff : dict
+        Mapping from class index to differential value
+    save_path : str, optional
+        Path to save the plot
+    """
+    val_pred = model.predict(X_val)
+    
+    # Convert to differentials for display
+    val_pred_diffs = pd.Series(val_pred).map(class_to_diff).values
+    val_true_diffs = pd.Series(y_val).map(class_to_diff).values
+    
+    cm = confusion_matrix(val_true_diffs, val_pred_diffs, labels=differential_classes)
+    
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
+                xticklabels=differential_classes, 
+                yticklabels=differential_classes,
+                cbar_kws={'label': 'Count'})
+    plt.xlabel('Predicted End Differential')
+    plt.ylabel('Actual End Differential')
+    plt.title('EP Model Confusion Matrix\n(End Differential Distribution)')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
+
+def plot_ep_prediction_distribution(model, X_val, y_val, differential_classes, class_to_diff, save_path=None):
+    """
+    Plot predicted vs actual distribution of end differentials.
+    
+    Parameters
+    ----------
+    model : XGBClassifier
+        Trained multiclass classifier
+    X_val : pd.DataFrame
+        Validation features
+    y_val : pd.Series
+        Validation class labels
+    differential_classes : np.ndarray
+        Array of differential values
+    class_to_diff : dict
+        Mapping from class index to differential value
+    save_path : str, optional
+        Path to save the plot
+    """
+    val_probs = model.predict_proba(X_val)
+    val_true_diffs = pd.Series(y_val).map(class_to_diff).values
+    
+    # Compute predicted distribution (average probabilities)
+    pred_dist = val_probs.mean(axis=0)
+    
+    # Compute actual distribution
+    actual_dist = np.zeros(len(differential_classes))
+    for i, diff in enumerate(differential_classes):
+        actual_dist[i] = np.mean(val_true_diffs == diff)
+    
+    # Plot
+    plt.figure(figsize=(10, 6))
+    x = np.arange(len(differential_classes))
+    width = 0.35
+    
+    plt.bar(x - width/2, actual_dist, width, label='Actual', alpha=0.8)
+    plt.bar(x + width/2, pred_dist, width, label='Predicted', alpha=0.8)
+    
+    plt.xlabel('End Differential')
+    plt.ylabel('Probability')
+    plt.title('EP Model: Predicted vs Actual Distribution')
+    plt.xticks(x, differential_classes)
+    plt.legend()
+    plt.grid(alpha=0.3, axis='y')
+    plt.tight_layout()
+    
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+    else:
+        plt.show()
+
+
+def plot_ep_feature_importance(model, save_path=None):
+    """
+    Plot feature importance for EP model.
+    
+    Parameters
+    ----------
+    model : XGBClassifier
+        Trained EP model
+    save_path : str, optional
+        Path to save the plot
+    """
+    importance = model.feature_importances_
+    
     feature_importance_df = pd.DataFrame({
-        'feature': FEATURE_COLS,
+        'feature': EP_FEATURE_COLS,
         'importance': importance
     }).sort_values('importance', ascending=False)
     
-    # Create plot
     plt.figure(figsize=(10, 8))
     sns.barplot(data=feature_importance_df, y='feature', x='importance', color='steelblue')
     plt.xlabel('Feature Importance')
     plt.ylabel('Feature')
-    plt.title('XGBoost Feature Importance')
+    plt.title('EP Model Feature Importance')
     plt.tight_layout()
     
     if save_path:
@@ -58,186 +189,3 @@ def plot_feature_importance(model, save_path=None):
         plt.show()
     
     return feature_importance_df
-
-
-def evaluate_model(model, X_val, y_val):
-    """
-    Evaluate model performance metrics.
-    
-    Parameters
-    ----------
-    model : XGBClassifier
-        Trained model
-    X_val : pd.DataFrame
-        Validation features
-    y_val : pd.Series
-        Validation target
-    
-    Returns
-    -------
-    dict
-        Dictionary with brier_score, logloss, and accuracy
-    """
-    val_probs = model.predict_proba(X_val)[:, 1]
-    
-    brier = brier_score_loss(y_val, val_probs)
-    logloss = log_loss(y_val, val_probs)
-    acc = accuracy_score(y_val, val_probs >= 0.5)
-    
-    return {
-        "brier_score": brier,
-        "logloss": logloss,
-        "accuracy": acc
-    }
-
-
-def plot_calibration_curve(model, X_val, y_val, n_bins=10, save_path=None):
-    """
-    Plot calibration curve for model predictions.
-    
-    Parameters
-    ----------
-    model : XGBClassifier
-        Trained model
-    X_val : pd.DataFrame
-        Validation features
-    y_val : pd.Series
-        Validation target
-    n_bins : int, default=10
-        Number of bins for calibration curve
-    save_path : str, optional
-        Path to save the plot. If None, plot is shown instead.
-    """
-    val_probs = model.predict_proba(X_val)[:, 1]
-    
-    prob_true, prob_pred = calibration_curve(
-        y_val,
-        val_probs,
-        n_bins=n_bins,
-        strategy="uniform"
-    )
-    
-    plt.figure(figsize=(7, 6))
-    
-    plt.plot(
-        prob_pred,
-        prob_true,
-        marker="o",
-        linewidth=2,
-        label="XGBoost"
-    )
-    
-    plt.plot([0, 1], [0, 1], "--", color="gray", label="Perfect calibration")
-    
-    plt.xlabel("Predicted win probability")
-    plt.ylabel("Observed win frequency")
-    plt.title("Calibration Curve (Validation Set)")
-    plt.legend()
-    plt.grid(alpha=0.3)
-    plt.ylim(0, 1)
-    plt.xlim(0, 1)
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()
-    else:
-        plt.show()
-
-
-def plot_win_probability(matchID, df, model, le_ref_team, le_opp_team, save_path=None):
-    """
-    Plot win probability over time for a specific match.
-    
-    Parameters
-    ----------
-    matchID : int
-        Match ID to plot
-    df : pd.DataFrame
-        Dataframe with match data
-    model : XGBClassifier
-        Trained model
-    le_ref_team : LabelEncoder
-        Fitted encoder for RefTeamID
-    le_opp_team : LabelEncoder
-        Fitted encoder for OppTeamID
-    save_path : str, optional
-        Path to save the plot. If None, plot is shown instead.
-    """
-    gamedata = df[df["MatchID"] == matchID].copy()
-    
-    if len(gamedata) == 0:
-        print(f"No data found for MatchID {matchID}")
-        return
-    
-    gamedata = gamedata.reset_index(drop=True)
-    gamedata["ShotIndex"] = np.arange(len(gamedata))
-    
-    X, _, _ = prepare_features(gamedata, le_ref_team=le_ref_team, le_opp_team=le_opp_team, fit_encoders=False)
-    gamedata["RefWinProb"] = model.predict_proba(X)[:, 1]
-    gamedata["OppWinProb"] = 1.0 - gamedata["RefWinProb"]
-    
-    # Automatically set to 100%/0% when game is over based on score
-    # Game is over when both shots remaining = 0 and no ends remaining (or it's the last shot)
-    game_over_mask = (
-        (gamedata["RefShotsRemaining"] == 0) & 
-        (gamedata["OppShotsRemaining"] == 0) &
-        (gamedata["EndsRemaining"] == 0)
-    )
-    
-    # If no ends remaining but game_over_mask is empty, check if it's the last shot of the game
-    if not game_over_mask.any() and len(gamedata) > 0:
-        # Check if last row has both shots remaining = 0
-        last_row = gamedata.iloc[-1]
-        if (last_row["RefShotsRemaining"] == 0) and (last_row["OppShotsRemaining"] == 0):
-            game_over_mask = gamedata.index == gamedata.index[-1]
-    
-    # For shots where game is over, set probability based on score differential
-    if game_over_mask.any():
-        for idx in gamedata[game_over_mask].index:
-            score_diff = gamedata.loc[idx, "RefScoreDiff"]
-            if score_diff > 0:
-                gamedata.loc[idx, "RefWinProb"] = 1.0
-                gamedata.loc[idx, "OppWinProb"] = 0.0
-            elif score_diff < 0:
-                gamedata.loc[idx, "RefWinProb"] = 0.0
-                gamedata.loc[idx, "OppWinProb"] = 1.0
-            else:
-                # Score differential = 0 (tie) - keep model prediction or use actual outcome
-                if "RefTeamWon" in gamedata.columns:
-                    final_outcome = gamedata.loc[idx, "RefTeamWon"]
-                    gamedata.loc[idx, "RefWinProb"] = float(final_outcome)
-                    gamedata.loc[idx, "OppWinProb"] = 1.0 - float(final_outcome)
-    
-    ref_team = gamedata["RefTeamID"].iloc[0]
-    opp_team = gamedata["OppTeamID"].iloc[0]
-    
-    plt.figure(figsize=(12, 6))
-    
-    plt.plot(
-        gamedata["ShotIndex"],
-        gamedata["RefWinProb"],
-        label=f"Ref Team {ref_team}",
-        linewidth=2
-    )
-    
-    plt.plot(
-        gamedata["ShotIndex"],
-        gamedata["OppWinProb"],
-        label=f"Opp Team {opp_team}",
-        linewidth=2
-    )
-    
-    plt.axhline(0.5, linestyle="--", color="gray", linewidth=1)
-    plt.ylim(0, 1)
-    
-    plt.xlabel("Shot (Game Timeline)")
-    plt.ylabel("Win Probability")
-    plt.title(f"Shot-Level Win Probability (MatchID = {matchID})")
-    plt.legend()
-    plt.grid(alpha=0.3)
-    
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        plt.close()
-    else:
-        plt.show()
