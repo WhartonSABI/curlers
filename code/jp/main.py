@@ -166,9 +166,9 @@ def main():
     )
     plot_pp_policy_heatmap(
         pp_policy_df,
-        save_path=os.path.join(results_dir, "pp_heatmap.png")
+        save_path=os.path.join(results_dir, "pp_heatmap_opp_saved.png")
     )
-    print("    Optimal PP policy heatmap saved: pp_heatmap.png")
+    print("    Optimal PP policy heatmap saved: pp_heatmap_opp_saved.png")
     print("      (shows when to use PP assuming opponent still has PP available)")
     
     print("    Computing optimal PP policy (DP)...")
