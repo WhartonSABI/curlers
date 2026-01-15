@@ -301,11 +301,13 @@ def main():
     """Main EDA pipeline."""
     
     # Setup paths
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_dir = os.path.join(project_root, "data", "raw")
     results_dir = os.path.join(project_root, "results", "eda")
+    processed_dir = os.path.join(project_root, "data", "processed")
     
     os.makedirs(results_dir, exist_ok=True)
+    os.makedirs(processed_dir, exist_ok=True)
     
     print("=" * 80)
     print("PP Decision States EDA")
@@ -359,9 +361,9 @@ def main():
         "EndsRemaining"
     ]
     decision_points[output_cols].to_csv(
-        os.path.join(results_dir, "pp_decision_points.csv"), index=False
+        os.path.join(processed_dir, "pp_decision_points.csv"), index=False
     )
-    print(f"Saved decision points to: {os.path.join(results_dir, 'pp_decision_points.csv')}")
+    print(f"Saved decision points to: {os.path.join(processed_dir, 'pp_decision_points.csv')}")
     
     print()
     print("=" * 80)

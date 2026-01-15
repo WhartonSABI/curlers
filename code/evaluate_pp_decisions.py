@@ -390,11 +390,13 @@ def main():
     """Main evaluation pipeline."""
     
     # Setup paths
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_dir = os.path.join(project_root, "data", "raw")
     results_dir = os.path.join(project_root, "results", "power-play")
+    processed_dir = os.path.join(project_root, "data", "processed")
     
     os.makedirs(results_dir, exist_ok=True)
+    os.makedirs(processed_dir, exist_ok=True)
     
     print("=" * 80)
     print("PP Decision Evaluation Pipeline")
@@ -447,9 +449,9 @@ def main():
     
     # Save results
     print("Step 5: Saving results...")
-    results_df.to_csv(os.path.join(results_dir, "pp_decision_evaluation.csv"), index=False)
-    team_stats.to_csv(os.path.join(results_dir, "pp_team_stats.csv"), index=False)
-    print("  Saved detailed results and team statistics")
+    results_df.to_csv(os.path.join(processed_dir, "pp_decision_evaluation.csv"), index=False)
+    team_stats.to_csv(os.path.join(processed_dir, "pp_team_stats.csv"), index=False)
+    print("  Saved detailed results and team statistics to data/processed")
     
     # Generate plots
     print("Step 6: Generating plots...")

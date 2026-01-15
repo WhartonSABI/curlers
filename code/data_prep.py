@@ -617,7 +617,7 @@ def add_final_state_rows(nnshots, ends_prep):
 
 def build_start_of_end_df(ends_prep, stones, games=None):
     """
-    Build end-level dataframe with one row per match-end at the start of the end.
+    Build end-level dataframe with one row per team per end at start of end.
     
     This is the correct decision-time state for PP decisions, which happen
     at the beginning of an end, before any stones are thrown.
@@ -645,34 +645,40 @@ def build_start_of_end_df(ends_prep, stones, games=None):
         - OppPPAvailableBeforeEnd (1 if opp PP available at start, 0 otherwise)
         - RefEloDiff (optional, if games provided)
     """
-    # Identify ref and opp teams per match
-    # Use min TeamID as ref team (consistent with existing code)
-    match_teams = (
-        ends_prep.groupby(["CompetitionID", "SessionID", "GameID"])["TeamID"]
-        .unique()
-        .reset_index()
+    # Compute PP availability per team per end (strictly before the end)
+    ends_team = ends_prep.copy()
+    ends_team["PPUsedThisEndTeam"] = (
+        ends_team["PowerPlay"].fillna(0).astype(int).isin([1, 2])
+    ).astype(int)
+    ends_team["GameTeamID"] = (
+        ends_team["CompetitionID"].astype(str) + "_" +
+        ends_team["SessionID"].astype(str) + "_" +
+        ends_team["GameID"].astype(str) + "_" +
+        ends_team["TeamID"].astype(str)
     )
-    match_teams["RefTeamID"] = match_teams["TeamID"].apply(lambda x: min(x))
-    match_teams["OppTeamID"] = match_teams["TeamID"].apply(lambda x: max(x))
-    match_teams = match_teams.drop(columns=["TeamID"])
-    
-    # Merge to get ref/opp team IDs
-    ends_with_teams = ends_prep.merge(
-        match_teams,
-        on=["CompetitionID", "SessionID", "GameID"],
-        how="left"
+    pp_used_end = (
+        ends_team[ends_team["PPUsedThisEndTeam"] == 1]
+        .groupby("GameTeamID")["EndID"]
+        .min()
+        .rename("PPUsedEnd")
     )
+    ends_team = ends_team.merge(pp_used_end, on="GameTeamID", how="left")
+    ends_team["PPAvailableBeforeEndTeam"] = (
+        ends_team["PPUsedEnd"].isna() | (ends_team["EndID"] < ends_team["PPUsedEnd"])
+    ).astype(int)
     
-    # Create one row per end from ref perspective
-    ref_ends = ends_with_teams[ends_with_teams["TeamID"] == ends_with_teams["RefTeamID"]].copy()
-    opp_ends = ends_with_teams[ends_with_teams["TeamID"] == ends_with_teams["OppTeamID"]].copy()
-    
-    # Merge ref and opp data
-    end_df = ref_ends.merge(
-        opp_ends[["CompetitionID", "SessionID", "GameID", "EndID", "Result", "TotalGameScoreStartOfEnd"]],
+    # Self-join to create one row per team per end (ref vs opp)
+    end_df = ends_team.merge(
+        ends_team,
         on=["CompetitionID", "SessionID", "GameID", "EndID"],
         suffixes=("_ref", "_opp")
     )
+    end_df = end_df[end_df["TeamID_ref"] != end_df["TeamID_opp"]].copy()
+    
+    end_df = end_df.rename(columns={
+        "TeamID_ref": "RefTeamID",
+        "TeamID_opp": "OppTeamID"
+    })
     
     # Compute ref perspective columns
     end_df["RefScoreDiffStartOfEnd"] = (
@@ -704,74 +710,18 @@ def build_start_of_end_df(ends_prep, stones, games=None):
     # PP usage this end: PowerPlay in {1, 2} means used
     # Create single variable: 1 if ref uses PP, -1 if opp uses PP, 0 if neither
     end_df["RefUsesPPThisEnd"] = (
-        end_df["PowerPlay"].fillna(0).astype(int).isin([1, 2])
+        end_df["PowerPlay_ref"].fillna(0).astype(int).isin([1, 2])
     ).astype(int)
-    
-    # For opp PP, we need to check opp team's PowerPlay
-    # Merge opp ends to get opp PowerPlay
-    opp_pp = opp_ends[["CompetitionID", "SessionID", "GameID", "EndID", "PowerPlay"]].copy()
-    opp_pp = opp_pp.rename(columns={"PowerPlay": "OppPowerPlay"})
-    end_df = end_df.merge(
-        opp_pp,
-        on=["CompetitionID", "SessionID", "GameID", "EndID"],
-        how="left"
-    )
     end_df["OppUsesPPThisEnd"] = (
-        end_df["OppPowerPlay"].fillna(0).astype(int).isin([1, 2])
+        end_df["PowerPlay_opp"].fillna(0).astype(int).isin([1, 2])
     ).astype(int)
     
     # Create single PP variable: 1 if ref uses, -1 if opp uses, 0 if neither
     end_df["PPUsedThisEnd"] = end_df["RefUsesPPThisEnd"] - end_df["OppUsesPPThisEnd"]
     
-    # Compute PP availability before end
-    # Create GameTeamID for tracking
-    end_df["RefGameTeamID"] = (
-        end_df["CompetitionID"].astype(str) + "_" +
-        end_df["SessionID"].astype(str) + "_" +
-        end_df["GameID"].astype(str) + "_" +
-        end_df["RefTeamID"].astype(str)
-    )
-    end_df["OppGameTeamID"] = (
-        end_df["CompetitionID"].astype(str) + "_" +
-        end_df["SessionID"].astype(str) + "_" +
-        end_df["GameID"].astype(str) + "_" +
-        end_df["OppTeamID"].astype(str)
-    )
-    
-    # Find first end where each team used PP
-    ref_pp_used_end = (
-        end_df[end_df["RefUsesPPThisEnd"] == 1]
-        .groupby("RefGameTeamID")["EndID"]
-        .min()
-        .rename("RefPPUsedEnd")
-    )
-    opp_pp_used_end = (
-        end_df[end_df["OppUsesPPThisEnd"] == 1]
-        .groupby("OppGameTeamID")["EndID"]
-        .min()
-        .rename("OppPPUsedEnd")
-    )
-    
-    end_df = end_df.merge(
-        ref_pp_used_end,
-        left_on="RefGameTeamID",
-        right_index=True,
-        how="left"
-    )
-    end_df = end_df.merge(
-        opp_pp_used_end,
-        left_on="OppGameTeamID",
-        right_index=True,
-        how="left"
-    )
-    
     # PP available if not used yet (strict < check)
-    end_df["RefPPAvailableBeforeEnd"] = (
-        end_df["RefPPUsedEnd"].isna() | (end_df["EndID"] < end_df["RefPPUsedEnd"])
-    ).astype(int)
-    end_df["OppPPAvailableBeforeEnd"] = (
-        end_df["OppPPUsedEnd"].isna() | (end_df["EndID"] < end_df["OppPPUsedEnd"])
-    ).astype(int)
+    end_df["RefPPAvailableBeforeEnd"] = end_df["PPAvailableBeforeEndTeam_ref"].astype(int)
+    end_df["OppPPAvailableBeforeEnd"] = end_df["PPAvailableBeforeEndTeam_opp"].astype(int)
     
     # Add Elo diff if games provided
     if games is not None:

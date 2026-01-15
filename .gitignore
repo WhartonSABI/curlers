@@ -2,11 +2,11 @@
 ### FILES & FOLDERS ###
 #######################
 
-# private data
-data
+# archived files and folders
+archive/
 
 # submission materials
-submission
+submission/
 
 
 ##############

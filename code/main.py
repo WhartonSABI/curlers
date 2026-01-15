@@ -30,17 +30,23 @@ from results import (
     plot_ep_prediction_distribution,
     plot_ep_feature_importance
 )
+from eda_pp_decisions import main as run_pp_eda
+from evaluate_pp_decisions import main as run_pp_evaluation
 
 def main():
     """Main pipeline execution."""
     
     # Setup paths
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     data_dir = os.path.join(project_root, "data", "raw")
     results_dir = os.path.join(project_root, "results", "power-play")
+    ep_results_dir = os.path.join(project_root, "results", "ep")
+    processed_dir = os.path.join(project_root, "data", "processed")
     
-    # Create results directory if it doesn't exist
+    # Create results directories if they don't exist
     os.makedirs(results_dir, exist_ok=True)
+    os.makedirs(ep_results_dir, exist_ok=True)
+    os.makedirs(processed_dir, exist_ok=True)
     
     print("=" * 80)
     print("Power Play Decision Analysis Pipeline")
@@ -61,6 +67,14 @@ def main():
     print("    Building end-level start-of-end dataframe...")
     end_level_df = build_start_of_end_df(ends_prep, stones, games)
     print(f"    Built {len(end_level_df):,} end-level rows")
+    end_level_df.to_csv(os.path.join(processed_dir, "end_level_start.csv"), index=False)
+    print("    Saved end-level data to data/processed/end_level_start.csv")
+    print()
+
+    # EDA on decision points (uses raw data, no model required)
+    print("Step 1b: PP decision EDA...")
+    run_pp_eda()
+    print()
     
     print("    Training end-level EP distribution model (regular ends)...")
     ep_model, ep_train_df, ep_val_df, differential_classes, class_to_diff = train_end_differential_distribution_model(
@@ -105,46 +119,23 @@ def main():
     print("    Generating EP model plots...")
     plot_ep_confusion_matrix(
         ep_model, X_ep_val, y_ep_val, differential_classes, class_to_diff,
-        save_path=os.path.join(results_dir, "ep_confusion_matrix.png")
+        save_path=os.path.join(ep_results_dir, "confusion_matrix.png")
     )
     plot_ep_prediction_distribution(
         ep_model, X_ep_val, y_ep_val, differential_classes, class_to_diff,
-        save_path=os.path.join(results_dir, "ep_distribution.png")
+        save_path=os.path.join(ep_results_dir, "distribution.png")
     )
     ep_feature_importance_df = plot_ep_feature_importance(
         ep_model,
-        save_path=os.path.join(results_dir, "ep_feature_importance.png")
+        save_path=os.path.join(ep_results_dir, "feature_importance.png")
     )
     print(f"      Top 5 EP features:")
     for idx, row in ep_feature_importance_df.head(5).iterrows():
         print(f"        {row['feature']}: {row['importance']:.4f}")
     
-    # Test Elo bucket sizes
-    print("    Testing Elo bucket sizes...")
-    elo_bucket_results = test_elo_bucket_sizes(
-        end_level_df, ep_model, differential_classes, class_to_diff,
-        bucket_sizes=[10.0, 25.0, 50.0, 100.0, 200.0],
-        early_quit_model=early_quit_model,
-        extra_end_ep_model=None,  # No separate extra end model
-        extra_end_differential_classes=None,
-        extra_end_class_to_diff=None
-    )
-    print("    Elo bucket test results:")
-    print(elo_bucket_results.to_string(index=False))
-    # Choose bucket size with best cache hit rate and low value diff
-    best_bucket = elo_bucket_results.loc[
-        (elo_bucket_results["avg_value_diff"] < 0.001) & 
-        (elo_bucket_results["cache_hit_rate"] == elo_bucket_results["cache_hit_rate"].max()),
-        "bucket_size"
-    ]
-    if len(best_bucket) > 0:
-        elo_bucket_size = best_bucket.iloc[0]
-    else:
-        # Fallback: use bucket with highest cache hit rate
-        elo_bucket_size = elo_bucket_results.loc[
-            elo_bucket_results["cache_hit_rate"].idxmax(), "bucket_size"
-        ]
-    print(f"    Selected Elo bucket size: {elo_bucket_size}")
+    # Use fixed Elo bucket size (previously selected)
+    elo_bucket_size = 10.0
+    print(f"    Using fixed Elo bucket size: {elo_bucket_size}")
     
     # Compute optimal PP policy using DP
     # Two scenarios are computed:
@@ -209,6 +200,9 @@ def main():
     print("Pipeline completed successfully!")
     print(f"Results saved to: {results_dir}")
     print("=" * 80)
+    print()
+    print("Running PP decision evaluation...")
+    run_pp_evaluation()
 
 
 if __name__ == "__main__":
