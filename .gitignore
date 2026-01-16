@@ -9,7 +9,7 @@ archive/
 .DS_Store
 
 # submission folders
-submission
+submission*
 
 ##############
 ### PYTHON ###

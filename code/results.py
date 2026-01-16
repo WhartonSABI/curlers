@@ -156,8 +156,9 @@ def plot_ep_prediction_distribution(model, X_val, y_val, differential_classes, c
     width = 0.35
     display_labels = _format_ep_labels(differential_classes)
     
-    plt.bar(x - width/2, actual_dist, width, label='Actual', color='steelblue', alpha=0.85)
-    plt.bar(x + width/2, pred_dist, width, label='Predicted', color='seagreen', alpha=0.85)
+    # Use a colorblind-friendly, high-contrast pair (avoid blue-green combo)
+    plt.bar(x - width/2, actual_dist, width, label='Actual', color='#4C78A8', alpha=0.9)
+    plt.bar(x + width/2, pred_dist, width, label='Predicted', color='#F58518', alpha=0.9)
     
     plt.xlabel('End Differential')
     plt.ylabel('Probability')
