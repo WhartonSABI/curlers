@@ -20,7 +20,7 @@ from ep_end import (
     train_end_differential_distribution_model,
     train_early_quit_model
 )
-from ep_policy import dp_value
+from ep_policy import dp_value, pp_action_value
 from elo import compute_elo_ratings
 
 
@@ -131,15 +131,15 @@ def evaluate_pp_decisions(
         # Actual decision: did ref team use PP this end?
         actual_decision = 1 if row["PPUsedThisEnd"] == 1 else 0
         
-        # Compute win probability for both possible actions
-        wp_use_pp = dp_value(
-            end, score_diff, hammer, 0, opp_pp_avail,  # Use PP (ref_pp_avail = 0 after using)
+        # Compute win probability for both possible actions (forced use vs save)
+        wp_use_pp = pp_action_value(
+            end, score_diff, hammer, ref_pp_avail, opp_pp_avail, 1,
             ep_model, differential_classes, class_to_diff, value_cache,
             elo_diff, elo_bucket_size, score_diff_clip,
             early_quit_model, None, None, None
         )
-        wp_save_pp = dp_value(
-            end, score_diff, hammer, 1, opp_pp_avail,  # Save PP (ref_pp_avail = 1 still available)
+        wp_save_pp = pp_action_value(
+            end, score_diff, hammer, ref_pp_avail, opp_pp_avail, 0,
             ep_model, differential_classes, class_to_diff, value_cache,
             elo_diff, elo_bucket_size, score_diff_clip,
             early_quit_model, None, None, None
@@ -273,7 +273,11 @@ def plot_team_performance(team_stats, save_dir):
     plt.gca().invert_yaxis()
     plt.xlabel("Decision Accuracy (Fraction of Optimal Decisions)")
     plt.title("PP Decision Accuracy by Team\n(All teams ranked by total WP difference, ≥5 decisions)")
-    plt.xlim(0.6, 0.8)
+    # Dynamic zoom: cap at observed max (rounded up to nearest 0.005)
+    step = 0.005
+    acc_upper = float(np.ceil(acc_max / step) * step)
+    acc_lower = float(np.floor(acc_min / step) * step)
+    plt.xlim(acc_lower, acc_upper)
     plt.axvline(x=1.0, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Perfect (1.0)')
     plt.legend()
     plt.grid(axis='x', alpha=0.3)
@@ -328,8 +332,19 @@ def plot_decision_patterns(results_df, save_dir):
     score_mask = (heatmap_data.index >= -5) & (heatmap_data.index <= 5)
     end_mask = (heatmap_data.columns >= 1) & (heatmap_data.columns <= 8)
     heatmap_data = heatmap_data.loc[score_mask, end_mask]
-    sns.heatmap(heatmap_data, annot=True, fmt=".3f", cmap="Reds_r", vmin=-0.15, vmax=0,
-                cbar_kws={'label': 'Avg WP Difference\n(Actual - Optimal, ≤ 0)'})
+    # Dynamic color scale for better contrast in observed range
+    step = 0.005
+    wp_min = float(np.nanmin(heatmap_data.values))
+    vmin = float(np.floor(wp_min / step) * step) if wp_min < 0 else -step
+    sns.heatmap(
+        heatmap_data,
+        annot=True,
+        fmt=".3f",
+        cmap="Reds_r",
+        vmin=vmin,
+        vmax=0,
+        cbar_kws={'label': 'Avg WP Difference\n(Actual - Optimal, ≤ 0)'}
+    )
     plt.xlabel("End Number")
     plt.ylabel("Score Differential")
     plt.title("PP Decision Quality Heatmap\n(Average WP Difference: Actual - Optimal)\nDarker red = more WP lost")

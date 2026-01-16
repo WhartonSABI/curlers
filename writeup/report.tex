@@ -245,7 +245,7 @@ Because Power Play timing is discretionary, we compare historical decisions to t
     \item \textbf{Decision quality:} $\text{WP(Actual)} - \text{WP(Optimal)} \le 0$, i.e., win probability left on the table by deviating from the policy.
 \end{itemize}
 
-Figure~\ref{fig:pp_eval_heatmaps} shows that teams are usually close to optimal in early ends, but diverge sharply in late-game, high-leverage states. The largest average losses occur in end 8 when the game is close (tied or trailing narrowly), consistent with Figure~\ref{fig:policy}, where $\Delta$WP is largest in those same states.
+Figure~\ref{fig:pp_eval_heatmaps} shows that teams are usually close to optimal in early ends, with the largest average losses clustering around end 6 in small-deficit states (down 1--2), where mean decision quality dips to about $\Delta$WP $\approx -0.018$ (1.8 percentage points).
 
 \begin{figure}[htbp]
     \centering
@@ -311,7 +311,7 @@ The option value of saving a once-per-game Power Play usually declines as the ma
 
 Power Play usage is not randomized: teams choose it based on score, end, opponent, and other unobserved factors (for example, ice conditions). Our EP model conditions on the major observable confounders (score, time, hammer, Power Play availability, and strength), but the resulting ``Power Play effect'' should be interpreted as an observational relationship embedded in the estimated transition model rather than a causal treatment effect. The aim is prescriptive: to optimize within the empirical environment reflected by the data.
 
-Our decision-quality analysis shows substantial room for improvement in late-game situations. For example, in end 8 when trailing by 1 or 2 with hammer and Power Play available, deviations from the optimal policy correspond to large average win-probability losses (on the order of 10 percentage points in the highest-leverage cells in Figure~\ref{fig:pp_eval_heatmaps}). These are exactly the states where the policy heatmaps show the largest value of using Power Play immediately.
+Our decision-quality analysis shows measurable room for improvement in mid-to-late-game situations. The largest average losses appear around end 6 when trailing by 1--2, with mean losses of roughly 1.6--1.8 percentage points in the darkest cells of Figure~\ref{fig:pp_eval_heatmaps}. These are distinct from the end-8 states where the policy heatmaps show the largest value of using Power Play immediately.
 
 \subsection{Future Work}
 

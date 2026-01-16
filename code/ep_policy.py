@@ -489,6 +489,118 @@ def dp_value(
     return best_value
 
 
+def pp_action_value(
+    end,
+    score_diff,
+    hammer,
+    ref_pp_avail,
+    opp_pp_avail,
+    use_pp,
+    ep_model,
+    differential_classes,
+    class_to_diff,
+    value_cache,
+    elo_diff=0.0,
+    elo_bucket_size=50.0,
+    score_diff_clip=(-10, 10),
+    early_quit_model=None,
+    extra_end_ep_model=None,
+    extra_end_differential_classes=None,
+    extra_end_class_to_diff=None
+):
+    """
+    Compute expected win probability for a forced PP action in the current end.
+
+    This is the value of choosing use_pp (0/1) now, with optimal play afterward.
+    """
+    # Clip score_diff to reasonable range
+    score_diff = max(score_diff_clip[0], min(score_diff_clip[1], score_diff))
+
+    # If PP is unavailable, force use_pp to 0 to avoid invalid actions
+    if hammer == 1 and ref_pp_avail == 0:
+        use_pp = 0
+    if hammer == 0 and opp_pp_avail == 0:
+        use_pp = 0
+
+    # Handle early quit probability (for ends 1-7)
+    early_quit_prob = 0.0
+    if early_quit_model is not None and end <= 7:
+        state_row_for_quit = pd.Series({
+            "EndID": end,
+            "RefHasHammerStartOfEnd": hammer,
+            "RefScoreDiffStartOfEnd": score_diff,
+            "RefPPAvailableBeforeEnd": ref_pp_avail,
+            "OppPPAvailableBeforeEnd": opp_pp_avail,
+            "RefEloDiff": elo_diff
+        })
+        early_quit_prob = predict_early_quit_probability(state_row_for_quit, early_quit_model)
+
+    # Create state row for EP prediction
+    ends_remaining = max(8 - end, 0)
+    state_row = pd.Series({
+        "EndsRemaining": ends_remaining,
+        "RefHasHammerStartOfEnd": hammer,
+        "RefScoreDiffStartOfEnd": score_diff,
+        "PPUsedThisEnd": 0,  # Will be set based on action
+        "RefPPAvailableBeforeEnd": ref_pp_avail,
+        "OppPPAvailableBeforeEnd": opp_pp_avail,
+        "RefEloDiff": elo_diff
+    })
+
+    # Set PP action in state: 1 if ref uses, -1 if opp uses, 0 if neither
+    if hammer == 1:
+        state_row["PPUsedThisEnd"] = 1 if use_pp == 1 else 0
+    else:
+        state_row["PPUsedThisEnd"] = -1 if use_pp == 1 else 0
+
+    # Predict end differential distribution
+    prob_dist = predict_end_differential_distribution(
+        state_row, ep_model, differential_classes, class_to_diff
+    )
+
+    expected_value = 0.0
+    for end_diff, prob in prob_dist.items():
+        if prob <= 0:
+            continue
+
+        next_score = score_diff + end_diff
+        next_hammer_val = next_hammer(hammer, end_diff)
+
+        if hammer == 1:
+            next_ref_pp = next_pp_availability(ref_pp_avail, use_pp == 1)
+            next_opp_pp = opp_pp_avail
+        else:
+            next_ref_pp = ref_pp_avail
+            next_opp_pp = next_pp_availability(opp_pp_avail, use_pp == 1)
+
+        next_value = dp_value(
+            end + 1,
+            next_score,
+            next_hammer_val,
+            next_ref_pp,
+            next_opp_pp,
+            ep_model,
+            differential_classes,
+            class_to_diff,
+            value_cache,
+            elo_diff,
+            elo_bucket_size,
+            score_diff_clip,
+            early_quit_model,
+            extra_end_ep_model,
+            extra_end_differential_classes,
+            extra_end_class_to_diff
+        )
+
+        if early_quit_prob > 0 and end <= 7:
+            expected_value += prob * early_quit_prob * terminal_value(next_score, elo_diff)
+
+        continue_prob = 1.0 - early_quit_prob if early_quit_prob > 0 else 1.0
+        expected_value += continue_prob * prob * next_value
+
+    return expected_value
+
+
 def optimal_pp_policy(
     end,
     score_diff,
@@ -544,60 +656,47 @@ def optimal_pp_policy(
     """
     if hammer != 1 or ref_pp_avail != 1:
         return (0, 0.0)  # Not applicable
-    
-    # Create state row
-    # Compute EndsRemaining: max(8 - end, 0), treating extra ends (end > 8) as 0 ends remaining
-    ends_remaining = max(8 - end, 0)
-    state_row = pd.Series({
-        "EndsRemaining": ends_remaining,
-        "RefHasHammerStartOfEnd": 1,
-        "RefScoreDiffStartOfEnd": score_diff,
-        "PPUsedThisEnd": 0,  # Will be set: 1 if use PP, 0 if save
-        "RefPPAvailableBeforeEnd": 1,  # Ref has PP available (by assumption in this function)
-        "OppPPAvailableBeforeEnd": opp_pp_avail,
-        "RefEloDiff": elo_diff
-    })
-    
-    # Compute value for each action
-    value_use = 0.0
-    value_save = 0.0
-    
-    # Value if use PP
-    state_row["PPUsedThisEnd"] = 1
-    prob_dist_use = predict_end_differential_distribution(
-        state_row, ep_model, differential_classes, class_to_diff
+
+    value_use = pp_action_value(
+        end,
+        score_diff,
+        hammer,
+        ref_pp_avail,
+        opp_pp_avail,
+        1,
+        ep_model,
+        differential_classes,
+        class_to_diff,
+        value_cache,
+        elo_diff,
+        elo_bucket_size,
+        score_diff_clip,
+        early_quit_model,
+        extra_end_ep_model,
+        extra_end_differential_classes,
+        extra_end_class_to_diff
     )
-    for end_diff, prob in prob_dist_use.items():
-        if prob > 0:
-            next_score = score_diff + end_diff
-            next_hammer_val = next_hammer(1, end_diff)
-            next_ref_pp = 0  # Used PP
-            next_opp_pp = opp_pp_avail
-            value_use += prob * dp_value(
-                end + 1, next_score, next_hammer_val, next_ref_pp, next_opp_pp,
-                ep_model, differential_classes, class_to_diff, value_cache, elo_diff,
-                elo_bucket_size, score_diff_clip, early_quit_model,
-                extra_end_ep_model, extra_end_differential_classes, extra_end_class_to_diff
-            )
-    
-    # Value if save PP
-    state_row["PPUsedThisEnd"] = 0
-    prob_dist_save = predict_end_differential_distribution(
-        state_row, ep_model, differential_classes, class_to_diff
+
+    value_save = pp_action_value(
+        end,
+        score_diff,
+        hammer,
+        ref_pp_avail,
+        opp_pp_avail,
+        0,
+        ep_model,
+        differential_classes,
+        class_to_diff,
+        value_cache,
+        elo_diff,
+        elo_bucket_size,
+        score_diff_clip,
+        early_quit_model,
+        extra_end_ep_model,
+        extra_end_differential_classes,
+        extra_end_class_to_diff
     )
-    for end_diff, prob in prob_dist_save.items():
-        if prob > 0:
-            next_score = score_diff + end_diff
-            next_hammer_val = next_hammer(1, end_diff)
-            next_ref_pp = 1  # Still available
-            next_opp_pp = opp_pp_avail
-            value_save += prob * dp_value(
-                end + 1, next_score, next_hammer_val, next_ref_pp, next_opp_pp,
-                ep_model, differential_classes, class_to_diff, value_cache, elo_diff,
-                elo_bucket_size, score_diff_clip, early_quit_model,
-                extra_end_ep_model, extra_end_differential_classes, extra_end_class_to_diff
-            )
-    
+
     value_diff = value_use - value_save
     action = 1 if value_use > value_save else 0
     return (action, value_diff)
