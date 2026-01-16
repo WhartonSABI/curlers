@@ -11,12 +11,47 @@ produces diagnostics and evaluation plots, plus processed CSVs for analysis.
 - `data/processed/`: exported datasets used for analysis
 - `results/`: generated plots and figures
 
-## Quick start
-Run the full pipeline (data prep → EDA → modeling → policy → evaluation):
+## Prerequisites
+- Python 3 (use `python3` and `pip`)
+- Raw data CSVs in `data/raw/` (Competition, Competitors, Ends, Games, Stones, Teams)
+
+## Setup (once)
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -r requirements.txt
+```
+
+## Run everything (full pipeline)
+Run data prep → EDA → modeling → policy → evaluation:
 
 ```bash
 python3 code/main.py
 ```
+
+## Interactive app (local)
+For an interactive "enter game state → PP recommendation + WP delta" tool:
+
+### Option A: one-command runner (recommended)
+```bash
+./run_app.sh
+```
+
+### Option B: manual run
+```bash
+source .venv/bin/activate
+streamlit run code/pp_recommender_app.py
+```
+
+### Access the app
+- Open `http://localhost:8501` in your browser (Streamlit prints the URL)
+- Stop the app with `Ctrl+C` in the terminal
+
+Notes:
+- The app uses `data/processed/end_level_start.csv` if present; otherwise it builds from `data/raw/`.
+- `run_app.sh` creates/updates a local `.venv` and installs `requirements.txt`.
+- `requirements.txt` includes all dependencies used by the modeling pipeline and app.
 
 ## Outputs
 Running `code/main.py` generates:

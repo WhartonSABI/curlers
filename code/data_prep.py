@@ -215,8 +215,7 @@ def add_power_play_features(nnshots):
     PowerPlay = 2 means positioned stones moved left
     PowerPlay in {1, 2} means power play was used.
     
-    Fix 1: Treat PowerPlay in {1,2} as "used" (not just > 0)
-    Fix 2: PP availability must be "before this end" (EndID < PowerPlayUsedEnd, strict)
+    PP availability is based on ends strictly before first use.
     """
     nnshots = nnshots.copy()
     nnshots["PowerPlay"] = nnshots["PowerPlay"].fillna(0).astype(int)
@@ -276,7 +275,7 @@ def add_reference_team_features(nnshots, games):
     
     # RefPowerPlay: 1 if ref team used power play in this end, 0 otherwise
     # PowerPlay is per-shot, so we need to check if ref team used it in the end
-    # Fix 1: Treat PowerPlay in {1,2} as used (not just > 0)
+    # Treat PowerPlay in {1,2} as used in the end
     ref_pp_by_end = (
         nnshots[nnshots["IsRefTeam"] == 1]
         .groupby(["CompetitionID", "SessionID", "GameID", "EndID"])["PowerPlayUsedThisEnd"]

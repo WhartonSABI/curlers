@@ -60,7 +60,14 @@ def prepare_end_level_features(end_df):
     return X
 
 
-def train_end_differential_distribution_model(end_df, test_size=0.2, random_state=8, is_extra_end=False):
+def train_end_differential_distribution_model(
+    end_df,
+    test_size=0.2,
+    random_state=8,
+    is_extra_end=False,
+    use_class_weights=False,
+    class_weight_power=1.0
+):
     """
     Train distributional model to predict P(Δ=k) for end differential.
     
@@ -80,6 +87,10 @@ def train_end_differential_distribution_model(end_df, test_size=0.2, random_stat
         Random seed for train/test split
     is_extra_end : bool, default=False
         If True, train model specifically for extra ends (EndID > 8)
+    use_class_weights : bool, default=False
+        If True, use inverse-frequency class weights to emphasize rare outcomes
+    class_weight_power : float, default=1.0
+        Exponent for inverse-frequency weights (1.0 = full weighting, 0.0 = no weighting)
     
     Returns
     -------
@@ -123,14 +134,14 @@ def train_end_differential_distribution_model(end_df, test_size=0.2, random_stat
     max_diff = int(train_df["RefEndDifferential"].max())
     
     # Handle class imbalance: use coarser bins for rare outcomes
-    # Map extreme outcomes to bins: ≤-3, -2, -1, 0, +1, +2, ≥+3
+    # Map extreme outcomes to bins: ≤-4, -3, -2, -1, 0, +1, +2, +3, ≥+4
     # This stabilizes tail predictions which are critical for PP value
-    if min_diff < -3 or max_diff > 3:
+    if min_diff < -4 or max_diff > 4:
         # Use binned classes for better tail handling
-        differential_classes = np.array([-3, -2, -1, 0, 1, 2, 3])
+        differential_classes = np.array([-4, -3, -2, -1, 0, 1, 2, 3, 4])
         # Clip and map extreme values to bins
-        train_df["EndDiffBinned"] = train_df["RefEndDifferential"].clip(-3, 3).astype(int)
-        val_df["EndDiffBinned"] = val_df["RefEndDifferential"].clip(-3, 3).astype(int)
+        train_df["EndDiffBinned"] = train_df["RefEndDifferential"].clip(-4, 4).astype(int)
+        val_df["EndDiffBinned"] = val_df["RefEndDifferential"].clip(-4, 4).astype(int)
         train_df["EndDiffClass"] = train_df["EndDiffBinned"]
         val_df["EndDiffClass"] = val_df["EndDiffBinned"]
     else:
@@ -158,18 +169,25 @@ def train_end_differential_distribution_model(end_df, test_size=0.2, random_stat
     y_train = train_df["ClassLabel"]
     y_val = val_df["ClassLabel"]
     
-    # Compute class weights to handle imbalance (rare big ends are important for PP value)
-    class_counts = train_df["ClassLabel"].value_counts().sort_index()
-    total_samples = len(train_df)
-    class_weights = {}
-    for class_idx in range(len(differential_classes)):
-        count = class_counts.get(class_idx, 1)  # Avoid division by zero
+    sample_weights = None
+    if use_class_weights and class_weight_power > 0:
         # Inverse frequency weighting: rare classes get higher weight
-        class_weights[class_idx] = total_samples / (len(differential_classes) * count)
+        class_counts = train_df["ClassLabel"].value_counts().sort_index()
+        total_samples = len(train_df)
+        class_weights = {}
+        for class_idx in range(len(differential_classes)):
+            count = class_counts.get(class_idx, 1)  # Avoid division by zero
+            base_weight = total_samples / (len(differential_classes) * count)
+            class_weights[class_idx] = base_weight ** class_weight_power
+        
+        # Convert to sample_weight array
+        sample_weights = train_df["ClassLabel"].map(class_weights).values
     
-    # Convert to sample_weight array
-    sample_weights = train_df["ClassLabel"].map(class_weights).values
-    
+    mono_constraints = [0] * len(EP_FEATURE_COLS)
+    if "RefEloDiff" in EP_FEATURE_COLS:
+        mono_constraints[EP_FEATURE_COLS.index("RefEloDiff")] = 1
+    monotone_constraints = "(" + ",".join(str(v) for v in mono_constraints) + ")"
+
     model = XGBClassifier(
         n_estimators=300,
         max_depth=4,
@@ -179,16 +197,15 @@ def train_end_differential_distribution_model(end_df, test_size=0.2, random_stat
         random_state=19,
         objective="multi:softprob",
         num_class=len(differential_classes),
+        monotone_constraints=monotone_constraints,
         scale_pos_weight=1.0  # Will use sample_weights instead
     )
     
-    model.fit(
-        X_train,
-        y_train,
-        sample_weight=sample_weights,
-        eval_set=[(X_val, y_val)],
-        verbose=False
-    )
+    fit_kwargs = {"eval_set": [(X_val, y_val)], "verbose": False}
+    if sample_weights is not None:
+        fit_kwargs["sample_weight"] = sample_weights
+
+    model.fit(X_train, y_train, **fit_kwargs)
     
     return model, train_df, val_df, differential_classes, class_to_diff
 

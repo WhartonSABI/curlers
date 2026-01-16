@@ -1,0 +1,331 @@
+\documentclass[12pt,letterpaper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{authblk}
+\usepackage{parskip}
+\usepackage{xcolor}
+\usepackage{siunitx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\geometry{margin=1in}
+
+% Custom colors and hyperlinks
+\definecolor{linkcolor}{RGB}{0, 90, 160}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=linkcolor,
+    urlcolor=linkcolor,
+    citecolor=linkcolor
+}
+
+% Custom commands
+\newcommand{\E}{\mathbb{E}}
+\renewcommand{\P}{\mathbb{P}}
+\newcommand{\V}{\text{Var}}
+\newcommand{\ind}{\boldsymbol{1}} % indicator
+
+% Title and authors
+\title{Win-Probability-Aware Power Play Deployment in Mixed Doubles Curling}
+\author{}
+\date{January 15, 2026}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Mixed doubles curling includes a once-per-game \emph{Power Play} option for the team with last-stone advantage (the hammer). When a team calls a Power Play, the two pre-positioned stones are moved to the side, opening up one half of the sheet. Because the Power Play is scarce and context-dependent, its value is mostly determined by \emph{when} it is used rather than its average point-scoring increase. We build a win-probability-aware deployment policy by modeling a match as a finite-horizon Markov decision process (MDP) with a decision at the start of each end. Transition probabilities are estimated by a distributional expected-points model that predicts the full conditional distribution of end score differentials from decision-time features (end, score differential, hammer possession, Power Play usage, and relative team strength). Solving the MDP by backward induction yields an optimal stopping-style policy: when holding the hammer with Power Play available, use it if and only if the win-probability gain from using now exceeds the value of saving it for later. The resulting heatmaps provide practical guidance by end and score differential, with separate recommendations depending on whether the opponent has already used their Power Play. The largest gains appear in late-game, small-deficit states, where Power Play turns low-probability comeback paths into higher-leverage multi-point opportunities.
+\end{abstract}
+
+\section{Introduction}
+
+\subsection{Motivation}
+
+Mixed doubles curling differs from the traditional four-player game in three strategically important ways: (i) games last eight ends, (ii) each end begins with two \emph{positioned} stones already in play, and (iii) once per game, the team with the decision on the positioned stones may call a \emph{Power Play}, shifting the positioned stones to one side of the sheet. Under official rules, Power Play can only be used in ends 1--8, and blank ends change the next-end decision on positioned stones (and therefore affect last-stone advantage) \citep{WorldCurlingRules}.
+
+Because each team can use Power Play at most once, the key strategic question is about timing: use it now for an immediate scoring boost, or save it for a potentially more decisive later end. This tradeoff is not linear in the score and ends remaining: a one-point improvement early in the game does not mean the same thing as a one-point improvement in the last end. For that reason, our goal is not to maximize expected points, but to maximize \textbf{end-of-game win probability}.
+
+\subsection{Related Work and Our Contribution}
+
+Our approach builds on curling analytics that use Markov-style state representations and dynamic optimization to study strategic tradeoffs (for example, when to score versus blank and how end outcomes accumulate into match outcomes) \citep{KostukWilloughbySaedt2001EJOR, WilloughbyKostuk2004Interfaces, WilloughbyKostuk2005DecisionAnalysis, BrenzelShockYang2019JSA, FryAustinFanzon2025ManagerialFinance}. We follow this line of research, but tailor the state and action space to mixed doubles Power Play timing. Combining a distributional expected-points model with a finite-horizon MDP solved by dynamic programming, we produce a policy surface (a heatmap) mapping \{end, score differential\} to a recommended action (use vs.\ save), along with the estimated win-probability benefit of using Power Play immediately.
+
+\section{Data and Preprocessing}
+
+\subsection{Data Sources and Unit of Analysis}
+
+We use the Curlit-derived international competition data provided for the CSAS 2026 Data Challenge. The raw tables contain shot-by-shot stone positions and end outcomes across major events (Olympics and World Championships). Each raw observation corresponds to one thrown stone with post-shot stone coordinates.
+
+Power Play decisions are made at the \emph{start} of an end, before any stones are thrown. So we convert the shot-level tables into an \emph{end-level start state} dataset with one row per team per end, representing the decision-time context. For each game and end, we create two rows (one per team as the reference team) with the following features:
+\begin{itemize}[leftmargin=*]
+    \item End number $e \in \{1, \ldots, 8\}$ and score differential at the start of the end $d_e$ (reference minus opponent).
+    \item Hammer indicator $h_e \in \{0,1\}$ (1 if the reference team delivers last stone in the end).
+    \item Power Play availability indicators $(p^\text{ref}_e, p^\text{opp}_e)\in \{0,1\}^2$ indicating whether each team has already used its Power Play prior to end $e$.
+    \item Realized end score differential $\Delta_e$ (reference end points minus opponent end points), used as the EP model target.
+\end{itemize}
+
+Hammer possession is inferred from the last shot recorded in the end (the team that throws last has the hammer). Power Play availability is computed from the first end in which a team uses Power Play; availability is 1 strictly before that end and 0 afterward. For decision analysis, we define availability ``at the start of the end'' so that the end in which a Power Play is still counted as ``available'' at the decision moment.
+
+\subsection{Team Strength Control via Elo}
+
+Power Play timing plausibly depends on team strength (for example, stronger teams may systemically call the Power Play at different times). To control for heterogeneous team quality without expanding the state space to include team IDs, we build an Elo rating from match outcomes and use the Elo difference (reference minus opponent) as a scalar strength covariate. We enforce a monotonic constraint on Elo in the EP model so larger Elo differences do not decrease predicted outcome quality. Elo plays two roles: it improves calibration of the end outcome model, and it reduces confounding when estimating the relationship between Power Play usage and end outcomes.
+
+\subsection{Sample Sizes}
+
+After preprocessing, we obtain:
+\begin{itemize}[leftmargin=*]
+    \item 5,274 start-of-end team-states across 344 games.
+    \item 2,282 Power-Play-eligible decision states (hammer and Power Play available in ends 1--8).
+\end{itemize}
+
+\section{Modeling Approach}
+
+\subsection{Distributional Expected-Points Model}
+
+\subsubsection{Target}
+
+Let $\Delta_e$ denote the end score differential from the reference team's perspective in end $e$ (positive if the reference team outscored the opponent, negative if the opponent outscored the reference, and 0 for a blank end). The dynamic program requires the \emph{full} conditional distribution
+\[
+\P(\Delta_e = k \mid X_e), \quad k \in \mathcal{K},
+\]
+not just $\E[\Delta_e \mid X_e]$, because win probability is sensitive to tail events (for example, the chance of scoring 3 or more points in an end).
+
+\subsubsection{Features}
+
+The feature vector $X_e$ uses only information known at the start of the end:
+\[
+X_e = (\text{EndsRemaining},\ h_e,\ d_e,\ \text{PPUsedThisEnd},\ p^\text{ref}_e,\ p^\text{opp}_e,\ \text{EloDiff}).
+\]
+Here, \texttt{PPUsedThisEnd} equals $+1$ if the reference team uses Power Play, $-1$ if the opponent uses Power Play, and $0$ otherwise. This lets the model learn different outcome distributions depending on whether the end is played under a Power Play configuration.
+
+\subsubsection{Model Class}
+
+We fit a multiclass gradient-boosted tree classifier (XGBoost) to estimate $\P(\Delta_e=k\mid X_e)$. Because extreme ends are rare but strategically important, we bin outcomes into
+\[
+\mathcal{K} = \{-4, -3, -2, -1, 0, 1, 2, 3, 4\},
+\]
+where $\pm 4$ represent ``4 or more'' in magnitude. We do not apply class reweighting in the baseline fit, which preserves the dominant mass around $\{-1,0,1\}$ and avoids over-emphasizing tail outcomes.
+
+\subsubsection{Validation Protocol and Diagnostics}
+
+To avoid leakage across ends within the same match, we split train/validation by game identifier (grouped holdout). We report: (i) exact-class accuracy, (ii) multiclass log loss, and (iii) mean absolute error of the implied expected differential $\widehat{\E}[\Delta_e\mid X_e] = \sum_{k\in\mathcal{K}} k\,\hat{p}_k(X_e)$. We also include a confusion matrix and predicted-versus-empirical marginal distributions.
+
+\subsection{EP Model Diagnostics}
+
+Validation metrics are: Accuracy = 0.329, LogLoss = 1.691, and MAE of expected differential = 1.308. Figure~\ref{fig:ep_diag} shows that the model captures the dominant mass at $\Delta \in \{-1,0,1\}$ while still placing nontrivial probability on multi-point tails (which are important for valuing Power Play).
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../results/ep/confusion_matrix.png}
+        \caption{Confusion matrix for EP end differentials}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}{0.48\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../results/ep/distribution.png}
+        \caption{Predicted vs.\ actual end-differential distribution}
+    \end{subfigure}
+    \caption{EP model diagnostics on grouped holdout data (tail bins labeled $-4-$ and $4+$).}
+    \label{fig:ep_diag}
+\end{figure}
+
+\subsection{Early Game Termination (Concessions)}
+
+International curling games can end before the scheduled eight ends due to concession or arithmetic elimination. Official rules specify that a game may end when a team concedes or is eliminated, and if tied after regulation, play continues with extra ends until the first score \citep{WorldCurlingRules}.
+
+Because early endings shorten the effective horizon, we optionally model a ``continuation'' probability. We fit a binary classifier for whether the recorded end is the last end of the game and occurs before end 8. When early termination is predicted, the process transitions to a terminal state with the current winner/loser.
+
+\subsection{Finite-Horizon Markov Decision Process}
+
+\subsubsection{States, Actions, and Rewards}
+
+We model the match from the reference team's perspective as an MDP with a decision at the start of each end. The state is
+\[
+s_e = (e,\ d_e,\ h_e,\ p^{\text{ref}}_e,\ p^{\text{opp}}_e,\ \delta),
+\]
+where $\delta$ is Elo difference (optionally bucketed for computational caching). The available actions depend on hammer possession and Power Play availability:
+\[
+a_e \in
+\begin{cases}
+\{0,1\} & \text{if } h_e=1 \text{ and } p^{\text{ref}}_e=1 \\
+\{0,1\} & \text{if } h_e=0 \text{ and } p^{\text{opp}}_e=1 \\
+\{0\} & \text{otherwise.}
+\end{cases}
+\]
+Here $a_e = 1$ means ``use Power Play this end'' and $a_e = 0$ means ``save.'' When the opponent has the decision, we use a conservative (minimax) assumption: the opponent chooses the action that minimizes the reference team's win probability.
+
+Terminal reward is $R = 1$ for a reference team win and $R = 0$ for a loss.
+
+\subsubsection{Transition Dynamics}
+
+Given state and action, we draw an end differential $\Delta_e$ from the learned distribution $\P(\Delta_e = k \mid X_e(a_e))$. The score updates as $d_{e+1}=d_e + \Delta_e$. Hammer dynamics follow mixed doubles conventions: the non-scoring team obtains the next-end advantage, and a blank end changes the next-end decision on positioned stones \citep{WorldCurlingRules}. Power Play availability updates deterministically: once used, it becomes unavailable for subsequent ends.
+
+If teams are tied after end 8, the game proceeds to extra end(s) where the first score wins. Importantly, Power Play cannot be used in extra ends \citep{WorldCurlingRules}.
+
+\subsubsection{Dynamic Program}
+
+Let $V(s_e)$ be the optimal win probability from state $s_e$. Backward induction yields
+\[
+V(s_e) =
+\begin{cases}
+\max\limits_{a\in\{0,1\}} \E\left[V(s_{e+1})\mid s_e,a\right] & \text{if ref controls the action}\\
+\min\limits_{a\in\{0,1\}} \E\left[V(s_{e+1})\mid s_e,a\right] & \text{if opp controls the action}\\
+\E\left[V(s_{e+1})\mid s_e\right] & \text{otherwise.}
+\end{cases}
+\]
+Terminal states are evaluated after regulation as $V = \boldsymbol{1}\{d_9>0\}$, with the extra-end recursion applied when $d_9=0$.
+
+For presentation, we report the \emph{marginal value of immediate deployment}:
+\[
+\Delta \text{WP}(e,d) = V(e,d,h{=}1,p^{\text{ref}}{=}1,\cdot \mid a{=}1)\;-\;V(e,d,h{=}1,p^{\text{ref}}{=}1,\cdot \mid a{=}0),
+\]
+which is the win-probability gain from using Power Play now rather than saving it.
+
+\subsection{Implementation Notes}
+
+To keep computation tractable, we (i) clip score differentials to a bounded range (e.g., $[-10, 10]$) for DP caching, (ii) bucket Elo differences to 10-point increments for memoization, and (iii) compute policy heatmaps over a coach-relevant window of score differentials (e.g., $[-5, 5]$). These approximations stabilize runtime without changing the qualitative policy patterns.
+
+\section{Results}
+
+\subsection{Observed Power Play Usage Patterns}
+
+Figure~\ref{fig:eda_usage} summarizes empirical Power Play timing in the historical sample. Teams show some variation in their deployment strategies: a few deploy Power Play early (often in lopsided games), while most preserve it for later ends. This variation reinforces why a win-probability framing is useful.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.8\textwidth]{../results/eda/pp_usage_heatmap.png}
+    \caption{Power Play usage rate by end and score differential among decision-eligible states (hammer + PP available). Sparse cells may be masked.}
+    \label{fig:eda_usage}
+\end{figure}
+
+\subsection{Policy Heatmaps and Decision Rules}
+
+Figure~\ref{fig:policy} plots $\Delta$WP from using Power Play immediately across end and score differential in an evenly-matched game. These values are shown under two opponent scenarios: (i) the opponent still retains Power Play (worst case), and (ii) the opponent has already used theirs (option-asymmetry case). Positive values indicate ``use now''; negative values indicate ``save.''
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.8\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../results/power-play/pp_heatmap_opp_saved.png}
+        \caption{Opponent PP available}
+    \end{subfigure}
+    \vspace{0.6em}
+    \begin{subfigure}{0.8\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../results/power-play/pp_heatmap_opp_used.png}
+        \caption{Opponent PP used}
+    \end{subfigure}
+    \caption{Optimal PP policy heatmaps: $\Delta$WP = WP(use now) $-$ WP(save).}
+    \label{fig:policy}
+\end{figure}
+
+\subsubsection{Key Findings}
+
+The strongest guidance appears in late-game, close-score states. For example, using Power Play in end 8 while down 1 increases win probability by about \textbf{10.6\%} when the opponent still has Power Play available and \textbf{11.5\%} if the opponent has already used theirs. Down 2 in end 8 still shows a meaningful gain of about \textbf{4.2\%} (or \textbf{4.5\%} if the opponent has already used theirs). When tied entering end 8, Power Play is also positive (about \textbf{8.1\%} with opponent PP available and \textbf{9.8\%} if it is already used), consistent with its role in creating higher-upside scoring chances.
+
+Earlier in the game, using Power Play while substantially behind is often not worth it. The immediate scoring bump is outweighed by the option value of saving Power Play for a later, higher-leverage end.
+
+\subsection{Optimality of Observed Power Play Decisions}
+
+Because Power Play timing is discretionary, we compare historical decisions to the DP-optimal policy on the same state space. For each observed decision point, we compute:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Decision accuracy:} $\ind\{\text{Actual}=\text{Optimal}\}$, aggregated by situation.
+    \item \textbf{Decision quality:} $\text{WP(Actual)} - \text{WP(Optimal)} \le 0$, i.e., win probability left on the table by deviating from the policy.
+\end{itemize}
+
+Figure~\ref{fig:pp_eval_heatmaps} shows that teams are usually close to optimal in early ends, but diverge sharply in late-game, high-leverage states. The largest average losses occur in end 8 when the game is close (tied or trailing narrowly), consistent with Figure~\ref{fig:policy}, where $\Delta$WP is largest in those same states.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.8\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../results/power-play/pp_accuracy_heatmap.png}
+        \caption{Decision accuracy by end and score differential (labels show sample size).}
+        \label{fig:pp_accuracy_heatmap}
+    \end{subfigure}
+    
+    \vspace{0.6em}
+    \begin{subfigure}{0.8\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../results/power-play/pp_decision_heatmap.png}
+        \caption{Decision quality: mean $\text{WP(Actual)}-\text{WP(Optimal)}$.}
+        \label{fig:pp_quality_heatmap}
+    \end{subfigure}
+    \caption{Observed Power Play timing vs.\ the DP-optimal policy.}
+    \label{fig:pp_eval_heatmaps}
+\end{figure}
+
+Figure~\ref{fig:pp_team_bars} summarizes performance by team, merging DP evaluation with team names from the raw data and ranking teams by total win probability lost from Power Play decisions. Colors run from red (worse) to green (better) to highlight relative performance.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.8\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../results/power-play/pp_team_accuracy.png}
+        \caption{Team decision accuracy ($\ge 5$ decisions).}
+        \label{fig:pp_team_accuracy}
+    \end{subfigure}
+    \vspace{0.6em}
+    \begin{subfigure}{0.8\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{../results/power-play/pp_team_performance.png}
+        \caption{Total WP difference by team ($\ge 5$ decisions).}
+        \label{fig:pp_team_performance}
+    \end{subfigure}
+    \caption{Team-level decision accuracy and total WP impact (red to green).}
+    \label{fig:pp_team_bars}
+\end{figure}
+
+\subsection{Coach-Facing Guidance}
+
+For an evenly matched game (EloDiff = 0), a simple rule-of-thumb is:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{Ends 1--6:} Default to saving unless the game is already high leverage or the opponent has exhausted their Power Play.
+    \item \textbf{Ends 7--8:} Use in most states except very lopsided games.
+\end{itemize}
+The main opportunity is consistent late-game timing: if a team still has Power Play available with hammer in the final end and the score is close, failing to deploy can cost a meaningful amount of win probability on average. For matchup-specific guidance, our interactive app lets the analyst vary team strength (EloDiff) and other game-state inputs to generate a WP-optimized recommendation.
+
+\section{Discussion}
+
+Two ideas explain most of the win-probability gains. First, Power Play changes the end's scoring distribution by making multi-point outcomes more accessible for the hammer team: moving the positioned stones opens a side of the sheet and reduces how crowded the centerline becomes. Second, because Power Play is scarce, its value is heavily driven by \emph{option value}---the flexibility to wait and use it when the game state is most important. This is why the policy often recommends saving early even when the immediate expected-point benefit is positive.
+
+Comparing opponent-available vs.\ opponent-used heatmaps also highlights an advantage of retained optionality. When the opponent has already spent their Power Play, the reference team effectively holds the only remaining ``tactical lever,'' and can use it at maximum leverage while the opponent cannot respond symmetrically.
+
+\subsection{Addressing Non-Monotonicity}
+
+The option value of saving a once-per-game Power Play usually declines as the match approaches the final end, but monotonicity in end number is not guaranteed. Saving is only valuable if you can use Power Play later, and that depends on hammer/decision dynamics under mixed doubles scoring and blank-end rules, as well as the restriction that Power Play cannot be used in extra ends \citep{WorldCurlingRules}. In our heatmaps, the noticeable non-monotonicities occur where $\Delta\text{WP}$ is close to zero, and the evaluation plots show that the largest practical gains are concentrated in late-game, high-leverage states rather than those boundary cases.
+
+\subsection{Interpretation}
+
+Power Play usage is not randomized: teams choose it based on score, end, opponent, and other unobserved factors (for example, ice conditions). Our EP model conditions on the major observable confounders (score, time, hammer, Power Play availability, and strength), but the resulting ``Power Play effect'' should be interpreted as an observational relationship embedded in the estimated transition model rather than a causal treatment effect. The aim is prescriptive: to optimize within the empirical environment reflected by the data.
+
+Our decision-quality analysis shows substantial room for improvement in late-game situations. For example, in end 8 when trailing by 1 or 2 with hammer and Power Play available, deviations from the optimal policy correspond to large average win-probability losses (on the order of 10 percentage points in the highest-leverage cells in Figure~\ref{fig:pp_eval_heatmaps}). These are exactly the states where the policy heatmaps show the largest value of using Power Play immediately.
+
+\subsection{Future Work}
+
+Several extensions would improve coach-facing specificity:
+\begin{itemize}[leftmargin=*]
+    \item \textbf{State enrichment with stone geometry:} Incorporating positioned stone coordinates, guard congestion, and shot-type tendencies could improve end-outcome estimates and produce more tailored recommendations, at the cost of a larger state space and higher data requirements.
+    \item \textbf{Opponent modeling beyond minimax:} Replace the conservative adversarial assumption with opponent-specific behavioral models estimated from historical Power Play timing and shot selection.
+    \item \textbf{Causal refinement:} Apply causal methods (e.g., causal forests) to better separate the effect of Power Play from selection, then propagate those estimates through the DP.
+\end{itemize}
+
+\section{Reproducibility}
+All results are reproducible from the provided codebase. Please follow the setup and run instructions in the repository README (including the end-to-end pipeline and the interactive app). The README also documents output locations, filenames, and expected artifacts.
+
+\bibliographystyle{apalike}
+\bibliography{references}
+
+\end{document}

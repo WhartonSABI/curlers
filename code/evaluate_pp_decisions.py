@@ -236,15 +236,23 @@ def plot_team_performance(team_stats, save_dir):
     # Filter to teams with at least 5 decisions
     team_stats_filtered = team_stats[team_stats["NumDecisions"] >= 5].copy()
     
+    # Order teams by total WP difference (most negative to least negative)
+    ordered_teams = team_stats_filtered.sort_values("TotalWPDiff", ascending=True).reset_index(drop=True)
+    ordered_by_accuracy = team_stats_filtered.sort_values("Accuracy", ascending=False).reset_index(drop=True)
+
     # Plot 1: Total WP difference (actual - optimal) by team
-    plt.figure(figsize=(14, 8))
-    top_teams = team_stats_filtered.head(20)
+    plt.figure(figsize=(14, 10))
+    top_teams = ordered_teams
     # Color: closer to 0 (optimal) is better, more negative is worse
-    colors = plt.cm.RdYlGn_r(np.linspace(0.2, 0.8, len(top_teams)))
-    bars = plt.barh(range(len(top_teams)), top_teams["TotalWPDiff"], color=colors, alpha=0.7)
-    plt.yticks(range(len(top_teams)), [f"Team {tid}" for tid in top_teams["TeamID"]])
+    perf_min = top_teams["TotalWPDiff"].min()
+    perf_max = top_teams["TotalWPDiff"].max()
+    perf_norm = (top_teams["TotalWPDiff"] - perf_min) / (perf_max - perf_min + 1e-9)
+    colors = plt.cm.RdYlGn(perf_norm)
+    plt.barh(range(len(top_teams)), top_teams["TotalWPDiff"], color=colors, alpha=0.7)
+    labels = top_teams["TeamName"].fillna(top_teams["TeamID"].astype(str)).tolist()
+    plt.yticks(range(len(top_teams)), labels)
     plt.xlabel("Total Win Probability Difference (Actual - Optimal)")
-    plt.title("PP Decision Performance by Team\n(Top 20 teams with ≥5 decisions)\nCloser to 0 = better (optimal decisions)")
+    plt.title("PP Decision Performance by Team\n(All teams ranked by total WP difference, ≥5 decisions)\nCloser to 0 = better (optimal decisions)")
     plt.axvline(x=0, color='black', linestyle='--', linewidth=2, label='Optimal (0)')
     plt.legend()
     plt.grid(axis='x', alpha=0.3)
@@ -252,47 +260,25 @@ def plot_team_performance(team_stats, save_dir):
     plt.savefig(os.path.join(save_dir, "pp_team_performance.png"), dpi=300, bbox_inches='tight')
     plt.close()
     
-    # Plot 2: Decision accuracy by team
-    plt.figure(figsize=(14, 8))
-    top_teams = team_stats_filtered.head(20)
-    plt.barh(range(len(top_teams)), top_teams["Accuracy"], color='steelblue', alpha=0.7)
-    plt.yticks(range(len(top_teams)), [f"Team {tid}" for tid in top_teams["TeamID"]])
+    # Plot 2: Decision accuracy by team (sorted by accuracy)
+    plt.figure(figsize=(14, 10))
+    top_teams = ordered_by_accuracy
+    acc_min = top_teams["Accuracy"].min()
+    acc_max = top_teams["Accuracy"].max()
+    acc_norm = (top_teams["Accuracy"] - acc_min) / (acc_max - acc_min + 1e-9)
+    colors = plt.cm.RdYlGn(acc_norm)
+    plt.barh(range(len(top_teams)), top_teams["Accuracy"], color=colors, alpha=0.7)
+    labels = top_teams["TeamName"].fillna(top_teams["TeamID"].astype(str)).tolist()
+    plt.yticks(range(len(top_teams)), labels)
+    plt.gca().invert_yaxis()
     plt.xlabel("Decision Accuracy (Fraction of Optimal Decisions)")
-    plt.title("PP Decision Accuracy by Team\n(Top 20 teams by total WP difference, ≥5 decisions)")
-    plt.xlim(0, 1)
+    plt.title("PP Decision Accuracy by Team\n(All teams ranked by total WP difference, ≥5 decisions)")
+    plt.xlim(0.6, 0.8)
     plt.axvline(x=1.0, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Perfect (1.0)')
     plt.legend()
     plt.grid(axis='x', alpha=0.3)
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, "pp_team_accuracy.png"), dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    # Plot 3: Scatter: Accuracy vs Total WP Difference
-    plt.figure(figsize=(10, 8))
-    plt.scatter(team_stats_filtered["Accuracy"], team_stats_filtered["TotalWPDiff"], 
-                s=team_stats_filtered["NumDecisions"]*2, alpha=0.6, c='steelblue', edgecolors='black', linewidth=0.5)
-    plt.xlabel("Decision Accuracy")
-    plt.ylabel("Total Win Probability Difference (Actual - Optimal)")
-    plt.title("PP Decision Performance: Accuracy vs Total WP Impact\n(Size = number of decisions, should be ≤ 0)")
-    plt.axhline(y=0, color='red', linestyle='--', linewidth=2, label='Optimal (0)')
-    plt.axvline(x=1.0, color='green', linestyle='--', linewidth=1, alpha=0.5, label='Perfect Accuracy')
-    plt.legend()
-    plt.grid(alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_accuracy_vs_wp.png"), dpi=300, bbox_inches='tight')
-    plt.close()
-    
-    # Plot 4: Distribution of average WP difference per decision
-    plt.figure(figsize=(10, 6))
-    plt.hist(team_stats_filtered["AvgWPDiff"], bins=30, color='steelblue', alpha=0.7, edgecolor='black')
-    plt.xlabel("Average Win Probability Difference per Decision (Actual - Optimal)")
-    plt.ylabel("Number of Teams")
-    plt.title("Distribution of Average WP Difference by Team\n(Teams with ≥5 decisions, should be ≤ 0)")
-    plt.axvline(x=0, color='red', linestyle='--', linewidth=2, label='Optimal (0)')
-    plt.legend()
-    plt.grid(axis='y', alpha=0.3)
-    plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_avg_diff_distribution.png"), dpi=300, bbox_inches='tight')
     plt.close()
 
 
@@ -445,6 +431,10 @@ def main():
     # Aggregate by team
     print("Step 4: Aggregating by team...")
     team_stats = aggregate_by_team(results_df)
+    teams_df = pd.read_csv(os.path.join(data_dir, "Teams.csv"), low_memory=False)
+    team_names = teams_df.groupby("TeamID")["Name"].first().reset_index()
+    team_stats = team_stats.merge(team_names, on="TeamID", how="left")
+    team_stats = team_stats.rename(columns={"Name": "TeamName"})
     print(f"  Aggregated results for {len(team_stats):,} teams")
     
     # Save results

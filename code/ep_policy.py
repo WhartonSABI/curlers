@@ -94,21 +94,13 @@ def extra_end_value(score_diff, hammer, ref_pp_avail, opp_pp_avail,
         "RefEloDiff": elo_diff
     })
     
-    # Determine available actions
-    if hammer == 1 and ref_pp_avail == 1:
-        actions = [0, 1]
-    elif hammer == 0 and opp_pp_avail == 1:
-        actions = [0, 1]
-    else:
-        actions = [0]
+    # Power Play cannot be used in extra ends
+    actions = [0]
     
     best_value = -np.inf
     
     for use_pp in actions:
-        if hammer == 1:
-            state_row["PPUsedThisEnd"] = 1 if use_pp == 1 else 0
-        else:
-            state_row["PPUsedThisEnd"] = -1 if use_pp == 1 else 0
+        state_row["PPUsedThisEnd"] = 0
         
         # Predict extra end differential distribution
         prob_dist = predict_end_differential_distribution(
@@ -310,21 +302,13 @@ def dp_value(
             "RefEloDiff": elo_diff
         })
         
-        # Determine available actions
-        if hammer == 1 and ref_pp_avail == 1:
-            actions = [0, 1]
-        elif hammer == 0 and opp_pp_avail == 1:
-            actions = [0, 1]
-        else:
-            actions = [0]
+        # Power Play cannot be used in extra ends
+        actions = [0]
         
         best_value = -np.inf
         
         for use_pp in actions:
-            if hammer == 1:
-                state_row["PPUsedThisEnd"] = 1 if use_pp == 1 else 0
-            else:
-                state_row["PPUsedThisEnd"] = -1 if use_pp == 1 else 0
+            state_row["PPUsedThisEnd"] = 0
             
             # Predict using regular EP model
             prob_dist = predict_end_differential_distribution(
@@ -437,16 +421,6 @@ def dp_value(
         # Compute expected value over all possible outcomes
         expected_value = 0.0
         
-        # Handle early quit: if game ends early, use terminal value
-        if early_quit_prob > 0 and end <= 7:
-            # With probability early_quit_prob, game ends after this end
-            final_score = score_diff  # Score doesn't change if game ends early
-            early_quit_value = terminal_value(final_score, elo_diff)
-            expected_value += early_quit_prob * early_quit_value
-        
-        # With probability (1 - early_quit_prob), game continues
-        continue_prob = 1.0 - early_quit_prob if early_quit_prob > 0 else 1.0
-        
         for end_diff, prob in prob_dist.items():
             if prob > 0:
                 # Update state for next end
@@ -492,6 +466,13 @@ def dp_value(
                         extra_end_class_to_diff
                     )
                 
+                # If game ends early after this end, use terminal value at end outcome
+                if early_quit_prob > 0 and end <= 7:
+                    early_quit_value = terminal_value(next_score, elo_diff)
+                    expected_value += prob * early_quit_prob * early_quit_value
+                
+                # With probability (1 - early_quit_prob), game continues
+                continue_prob = 1.0 - early_quit_prob if early_quit_prob > 0 else 1.0
                 expected_value += continue_prob * prob * next_value
         
         # For opp's turn, they minimize ref's value

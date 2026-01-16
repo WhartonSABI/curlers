@@ -12,6 +12,21 @@ from sklearn.calibration import calibration_curve
 from ep_end import EP_FEATURE_COLS, prepare_end_level_features
 
 
+def _format_ep_labels(differential_classes):
+    """Format labels with tail bins for EP plots."""
+    min_class = min(differential_classes)
+    max_class = max(differential_classes)
+    labels = []
+    for diff in differential_classes:
+        if diff == min_class and min_class <= -4:
+            labels.append(f"{min_class}-")
+        elif diff == max_class and max_class >= 4:
+            labels.append(f"{max_class}+")
+        else:
+            labels.append(str(diff))
+    return labels
+
+
 def evaluate_ep_model(model, X_val, y_val, differential_classes, class_to_diff):
     """
     Evaluate EP distribution model performance.
@@ -86,11 +101,12 @@ def plot_ep_confusion_matrix(model, X_val, y_val, differential_classes, class_to
     val_true_diffs = pd.Series(y_val).map(class_to_diff).values
     
     cm = confusion_matrix(val_true_diffs, val_pred_diffs, labels=differential_classes)
+    display_labels = _format_ep_labels(differential_classes)
     
     plt.figure(figsize=(10, 8))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', 
-                xticklabels=differential_classes, 
-                yticklabels=differential_classes,
+                xticklabels=display_labels, 
+                yticklabels=display_labels,
                 cbar_kws={'label': 'Count'})
     plt.xlabel('Predicted End Differential')
     plt.ylabel('Actual End Differential')
@@ -138,14 +154,15 @@ def plot_ep_prediction_distribution(model, X_val, y_val, differential_classes, c
     plt.figure(figsize=(10, 6))
     x = np.arange(len(differential_classes))
     width = 0.35
+    display_labels = _format_ep_labels(differential_classes)
     
-    plt.bar(x - width/2, actual_dist, width, label='Actual', alpha=0.8)
-    plt.bar(x + width/2, pred_dist, width, label='Predicted', alpha=0.8)
+    plt.bar(x - width/2, actual_dist, width, label='Actual', color='steelblue', alpha=0.85)
+    plt.bar(x + width/2, pred_dist, width, label='Predicted', color='seagreen', alpha=0.85)
     
     plt.xlabel('End Differential')
     plt.ylabel('Probability')
     plt.title('EP Model: Predicted vs Actual Distribution')
-    plt.xticks(x, differential_classes)
+    plt.xticks(x, display_labels)
     plt.legend()
     plt.grid(alpha=0.3, axis='y')
     plt.tight_layout()

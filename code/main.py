@@ -133,7 +133,7 @@ def main():
     for idx, row in ep_feature_importance_df.head(5).iterrows():
         print(f"        {row['feature']}: {row['importance']:.4f}")
     
-    # Use fixed Elo bucket size (previously selected)
+    # Use fixed Elo bucket size
     elo_bucket_size = 10.0
     print(f"    Using fixed Elo bucket size: {elo_bucket_size}")
     
