@@ -5,13 +5,15 @@
 # archived files and folders
 archive/
 
-# submission folder
-submission/
+# finder
+.DS_Store
+
+# submission folders
+submission
 
 ##############
 ### PYTHON ###
 ##############
-
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -242,11 +244,9 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
-
 ###########
 ### TEX ###
 ###########
-
 
 ## Core latex/pdflatex auxiliary files:
 *.aux
