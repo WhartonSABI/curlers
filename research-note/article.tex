@@ -1,0 +1,203 @@
+\documentclass[12pt,letterpaper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{setspace}
+\usepackage{enumitem}
+\usepackage{authblk}
+\usepackage{parskip}
+\usepackage{xcolor}
+\usepackage{siunitx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{natbib}
+\usepackage{booktabs}
+\usepackage{caption}
+\usepackage{subcaption}
+\geometry{margin=1in}
+
+% Enforce figures appear exactly where written
+\floatplacement{figure}{H}
+
+% Custom colors and hyperlinks
+\definecolor{linkcolor}{RGB}{0, 90, 160}
+\hypersetup{
+    colorlinks=true,
+    linkcolor=linkcolor,
+    urlcolor=linkcolor,
+    citecolor=linkcolor
+}
+
+% Custom commands
+\newcommand{\E}{\mathbb{E}}
+\renewcommand{\P}{\mathbb{P}}
+\newcommand{\V}{\text{Var}}
+\newcommand{\ind}{\boldsymbol{1}} % indicator
+
+% Title and authors
+\title{Pulling the Power Play: A Win Probability Strategy for Mixed Doubles Curling}
+\author{Trey Elder, Samen Hossain, \& Jonathan Pipping}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section*{What is Mixed Doubles Curling?}
+
+\paragraph{Ends.} Mixed doubles games are eight ends long—like innings, but on ice. In each end, both teams alternate throwing five stones apiece.
+
+\paragraph{Scoring an end.} Only one team can score points in each end: the team with the stone closest to the button. That team scores one point for each of their stones in the house that is closer than the opponent's nearest stone. If nobody has a stone in the house, the end is said to be ``blank,'' and no points are scored.
+
+\paragraph{Hammer.} The team that throws last in an end has a big advantage: they control the final shot. Under mixed doubles rules, the hammer passes to the team that did \emph{not} score in the previous end; if the end is blank, the hammer switches to the team that did not throw last.
+
+\paragraph{Pre-positioned stones.} Every end starts with two stones already in play: one as a guard and one behind the button. Figure~\ref{fig:regular_setup} shows the standard mixed doubles setup at the start of an end.
+
+\paragraph{Winning the game.} After eight ends, the team with more points wins; if tied, play continues with sudden-death extra ends until one team scores.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.6\textwidth]{figures/regular-setup.jpg}
+    \caption{Stone orientation at the start of an end.}
+    \label{fig:regular_setup}
+\end{figure}
+
+\section*{What is the Power Play?}
+
+At the start of an end, the team with the hammer may call a Power Play. When they do, the two pre-positioned stones shift to one side, opening a cleaner scoring lane. Figure~\ref{fig:pp_setup} contrasts the regular setup with the Power Play configuration.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{figures/pp-setup.jpg}
+    \caption{Prepositioned stone setup for regular ends (left) and Power Plays (right).}
+    \label{fig:pp_setup}
+\end{figure}
+
+The ground rules for using the Power Play are:
+\begin{itemize}[leftmargin=*]
+    \item Each team can use Power Play at most once.
+    \item It can be used only in ends 1--8 (not in extra ends).
+    \item Only the team with the hammer can call it.
+\end{itemize}
+
+On average, using the Power Play increases the hammer team's expected score by about 0.29 points in the end. It's clearly valuable, but the strategic question remains: \emph{when is the right time to deploy it?}
+
+\section*{Our Approach}
+
+The Power Play's once-per-game restriction gives it real \emph{option value} for teams: spending it now may provide some immediate benefit, but it also forfeits the opportunity to use it later in a higher-leverage situation. Furthermore, a point gained in the second or third end may be ``fixable'' over the remaining ends, while a point gained (or saved) in the seventh or eighth end can be decisive. That's why we evaluate Power Play timing in terms of \emph{winning the game}, not just the expected points gained in the current end.
+
+Our approach is to compute, at the start of each end, the team's win probability under two choices---use Power Play now or save it---and take the difference as the ``Power Play value'' in that situation. This produces a practical decision rule: use the Power Play when it increases win probability more than the value of keeping it for later.
+
+We implement this in two steps:
+\begin{enumerate}[leftmargin=*]
+    \item \textbf{Predict end outcomes.} Using historical curling data from the CSAS 2026 Data Challenge \citep{csas2026challenge,csas2026github}, we use a multiclass XGBoost model to predict the likelihood of each possible end result---from blank ends to multi-point ends---based on what we know at the start of the end: the end number, the current score, who has hammer, whether Power Play is used, and a simple measure of relative team strength.
+    \item \textbf{Solve ``use now vs.\ save.''} For each start-of-end situation, we estimate each team's chance of winning under two choices: using the Power Play now or saving it for later. We compute these by combining the predicted odds of each end outcome with the rules for how the game state updates, then work backward from the final end. The difference in win probabilities is the ``Power Play value'' in that situation:
+    \[
+        \Delta \text{WP} = \text{WP(use now)} - \text{WP(save)}
+    \]
+    Positive values mean ``use now,'' and negative values mean ``save.''
+\end{enumerate}
+
+
+\section*{Our Findings}
+
+Figure~\ref{fig:policy} summarizes the optimal timing policy as heatmaps over end number and score differential: \(\Delta\text{WP}\) is the win-probability gain from using Power Play now rather than saving it.
+
+Our optimal policy boils down to three takeaways:
+
+\begin{enumerate}
+
+\item \textbf{Power Play is most valuable late in close games.} With the hammer in the final end, using the Power Play meaningfully swings win probability in tight contests: for example:
+\begin{itemize}[leftmargin=2em]
+    \item End 8, tied: $+8$--$10$ percentage points of win probability.
+    \item End 8, down 1: $+10$--$11$ percentage points of win probability.
+    \item End 8, down 2: $+4$--$5$ percentage points of win probability.
+\end{itemize}
+\textbf{Why?} Late ends are high leverage, and they leave the opponent little or no time to recover from falling behind. Using a Power Play also increases the chance of a \emph{multi-point} end with the hammer, which is exactly what teams need to come from behind or score the winning point.
+
+\item \textbf{Early in the game, option value dominates.}
+A Power Play tends to add expected points in any end, but spending it early can reduce win probability because it sacrifices the ability to deploy it later when a one-end swing is more likely to decide the match. In other words, the key tradeoff is not ``points now'' versus ``points later,'' but ``win probability now'' versus the value of keeping the option.
+
+\item \textbf{Power Play is worth more when the opponent has already used theirs.}
+If the opponent has spent their Power Play, yours becomes the only remaining lever to open the sheet. That asymmetry increases the value of saving it for late, close situations: the opponent can no longer respond symmetrically.
+\end{enumerate}
+
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.9\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figures/pp_heatmap_opp_saved.png}
+        \caption{Opponent PP available}
+    \end{subfigure}
+    \vspace{0.6em}
+    \begin{subfigure}{0.9\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figures/pp_heatmap_opp_used.png}
+        \caption{Opponent PP used}
+    \end{subfigure}
+    \caption{Optimal PP policy heatmaps: $\Delta$WP = WP(use now) $-$ WP(save).}
+    \label{fig:policy}
+\end{figure}
+
+\section*{What Teams Actually Do}
+
+Figure~\ref{fig:eda_usage} shows \emph{when} teams deploy the Power Play across ends and score situations. Figure~\ref{fig:pp_accuracy} shows how often those choices align with the optimal recommendation (accuracy by situation).
+Overall, teams rarely call a Power Play in the earliest ends (aside from a few lopsided cases), with most usage concentrated in ends 6--8. Consistent with that pattern, decision accuracy is relatively high early in the game. The main departures from the optimal policy occur in the mid-game: in \emph{ends 5--6}, many teams deploy their Power Play even when the model recommends saving it for later. In those states, using it ``too early'' carries a measurable cost in win probability on average (roughly 2--3 percentage points in the most pronounced cells).
+The takeaway is simple: although a Power Play in end 5 or 6 can increase expected points in that end, it often comes at the expense of preserving the Power Play for the highest-leverage moments---late, close ends that can swing the final result.
+
+Figure~\ref{fig:pp_team_bars} summarizes teams' timing performance: how often their Power Play decisions match the optimal recommendation, and the net win probability they gained or lost from those decisions (relative to the optimal policy). In our data, Canada aligns most closely with the optimal policy, while Finland deviates the most. That said, accuracy and impact are not identical: Austria loses the least win probability from its timing choices, whereas Norway loses the most.
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.9\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figures/pp_usage_heatmap.png}
+        \caption{Power Play usage rate by end and score differential among decision-eligible states (hammer + PP available). Cells with no observations are masked.}
+        \label{fig:eda_usage}
+    \end{subfigure}
+    \vspace{0.6em}
+    \begin{subfigure}{0.9\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figures/pp_accuracy_heatmap.png}
+        \caption{Decision accuracy: fraction of situations where the observed choice matches the optimal policy (labels show sample size).}
+        \label{fig:pp_accuracy}
+    \end{subfigure}
+    \caption{Observed Power Play timing and how often it matches the optimal policy.}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \begin{subfigure}{0.9\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figures/pp_team_accuracy.png}
+        \caption{Decision accuracy by team ($\ge 5$ decisions).}
+        \label{fig:pp_team_accuracy}
+    \end{subfigure}
+    \vspace{0.6em}
+    \begin{subfigure}{0.9\textwidth}
+        \centering
+        \includegraphics[width=0.9\textwidth]{figures/pp_team_performance.png}
+        \caption{Total WP difference by team ($\ge 5$ decisions).}
+        \label{fig:pp_team_performance}
+    \end{subfigure}
+    \caption{Team-level Power Play decision-making: accuracy and net win-probability impact.}
+    \label{fig:pp_team_bars}
+\end{figure}
+
+
+
+\section*{Discussion}
+
+\textbf{Practical guidance.} The optimal Power Play policy can be summarized with a simple heuristic: in \textbf{ends 1--6}, teams should generally \textbf{save} their Power Play. Even in a close game, there is still enough time to absorb small swings, and the option value of holding until ends 7--8 is massive. In \textbf{ends 7--8}, the recommendation flips: teams should \textbf{use} the Power Play almost always. Late ends are high leverage, so deploying it then can create large win-probability swings with little time for the opponent to respond, and the option value is essentially zero. For matchup-specific guidance, we provide an interactive app and all reproducible code on \href{https://github.com/WhartonSABI/curlers}{GitHub}.
+
+\textbf{Caveat.} Power Play usage is not randomized: teams may choose when to deploy it based on outside factors (ice conditions, matchups, or tactical preferences) that we cannot fully observe in data. With that in mind, teams should treat our policy as a data-informed benchmark: useful for guiding decisions, but best combined with situational judgment. Ultimately, the right framing remains not ``does this help right now?'' but rather ``is this the moment when spending the Power Play is most likely to swing the match outcome in our favor?''.
+
+\bibliographystyle{apalike}
+\bibliography{references}
+
+\end{document}
