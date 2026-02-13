@@ -114,7 +114,7 @@ def plot_ep_confusion_matrix(model, X_val, y_val, differential_classes, class_to
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=600, bbox_inches='tight')
         plt.close()
     else:
         plt.show()
@@ -169,7 +169,7 @@ def plot_ep_prediction_distribution(model, X_val, y_val, differential_classes, c
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=600, bbox_inches='tight')
         plt.close()
     else:
         plt.show()
@@ -201,7 +201,7 @@ def plot_ep_feature_importance(model, save_path=None):
     plt.tight_layout()
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=600, bbox_inches='tight')
         plt.close()
     else:
         plt.show()

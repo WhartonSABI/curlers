@@ -122,7 +122,7 @@ def plot_pp_decision_distributions(decision_points, save_dir):
     plt.legend()
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_decisions_by_end.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_decisions_by_end.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 2: Distribution by score differential
@@ -151,7 +151,7 @@ def plot_pp_decision_distributions(decision_points, save_dir):
     plt.legend()
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_decisions_by_score.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_decisions_by_score.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 3: PP usage rate by end
@@ -170,7 +170,7 @@ def plot_pp_decision_distributions(decision_points, save_dir):
         plt.text(row["EndID"], row["mean"] + 0.02, f"n={int(row['count'])}", 
                 ha='center', va='bottom', fontsize=8)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_usage_rate_by_end.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_usage_rate_by_end.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 4: PP usage rate by score differential
@@ -190,7 +190,7 @@ def plot_pp_decision_distributions(decision_points, save_dir):
     plt.xticks(score_usage["RefScoreDiffStartOfEnd"])
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_usage_rate_by_score.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_usage_rate_by_score.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 5: Heatmap: PP usage rate by End vs ScoreDiff
@@ -218,7 +218,7 @@ def plot_pp_decision_distributions(decision_points, save_dir):
     plt.ylabel("Score Differential (Ref - Opp)")
     plt.title("PP Usage Rate Heatmap\n(Fraction of teams using PP by game state)")
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_usage_heatmap.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_usage_heatmap.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 6: Distribution of Elo differences at decision points
@@ -231,7 +231,7 @@ def plot_pp_decision_distributions(decision_points, save_dir):
     plt.legend()
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_decisions_elo_distribution.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_decisions_elo_distribution.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 7: Opponent PP availability at decision points
@@ -243,7 +243,7 @@ def plot_pp_decision_distributions(decision_points, save_dir):
             colors=colors, startangle=90)
     plt.title("Opponent PP Status at PP Decision Points\n(When ref team has hammer and PP available)")
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_decisions_opp_pp_status.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_decisions_opp_pp_status.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 8: PP usage rate by opponent PP availability
@@ -261,7 +261,7 @@ def plot_pp_decision_distributions(decision_points, save_dir):
                 ha='center', va='bottom', fontsize=10)
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_usage_by_opp_pp_status.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_usage_by_opp_pp_status.png"), dpi=600, bbox_inches='tight')
     plt.close()
 
 

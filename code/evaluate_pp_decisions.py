@@ -257,7 +257,7 @@ def plot_team_performance(team_stats, save_dir):
     plt.legend()
     plt.grid(axis='x', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_team_performance.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_team_performance.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 2: Decision accuracy by team (sorted by accuracy)
@@ -282,7 +282,7 @@ def plot_team_performance(team_stats, save_dir):
     plt.legend()
     plt.grid(axis='x', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_team_accuracy.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_team_accuracy.png"), dpi=600, bbox_inches='tight')
     plt.close()
 
 
@@ -302,7 +302,7 @@ def plot_decision_patterns(results_df, save_dir):
     plt.legend()
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_decision_by_end.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_decision_by_end.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 2: Average WP difference by score differential
@@ -320,7 +320,7 @@ def plot_decision_patterns(results_df, save_dir):
     plt.legend()
     plt.grid(alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_decision_by_score.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_decision_by_score.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 3: WP difference heatmap (End vs ScoreDiff) - shows where teams lose most WP
@@ -349,7 +349,7 @@ def plot_decision_patterns(results_df, save_dir):
     plt.ylabel("Score Differential")
     plt.title("PP Decision Quality Heatmap\n(Average WP Difference: Actual - Optimal)\nDarker red = more WP lost")
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_decision_heatmap.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_decision_heatmap.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 4: Decision accuracy heatmap (End vs ScoreDiff) - shows where teams make optimal decisions
@@ -383,7 +383,7 @@ def plot_decision_patterns(results_df, save_dir):
     plt.ylabel("Score Differential")
     plt.title("PP Decision Accuracy Heatmap\n(Fraction of Optimal Decisions by Situation)")
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_accuracy_heatmap.png"), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_accuracy_heatmap.png"), dpi=600, bbox_inches='tight')
     plt.close()
 
 

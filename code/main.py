@@ -3,6 +3,7 @@ Main script to run the complete curling win probability pipeline.
 """
 
 import os
+import shutil
 import sys
 import pandas as pd
 import numpy as np
@@ -203,6 +204,25 @@ def main():
     print()
     print("Running PP decision evaluation...")
     run_pp_evaluation()
+
+    # Copy research-note figures (600 DPI) from results to research-note/figures
+    research_note_figures = os.path.join(project_root, "research-note", "figures")
+    os.makedirs(research_note_figures, exist_ok=True)
+    eda_dir = os.path.join(project_root, "results", "eda")
+    copies = [
+        (os.path.join(results_dir, "pp_heatmap_opp_saved.png"), "pp_heatmap_opp_saved.png"),
+        (os.path.join(results_dir, "pp_heatmap_opp_used.png"), "pp_heatmap_opp_used.png"),
+        (os.path.join(results_dir, "pp_accuracy_heatmap.png"), "pp_accuracy_heatmap.png"),
+        (os.path.join(results_dir, "pp_team_accuracy.png"), "pp_team_accuracy.png"),
+        (os.path.join(results_dir, "pp_team_performance.png"), "pp_team_performance.png"),
+        (os.path.join(eda_dir, "pp_usage_heatmap.png"), "pp_usage_heatmap.png"),
+    ]
+    for src, name in copies:
+        dst = os.path.join(research_note_figures, name)
+        if os.path.exists(src):
+            shutil.copy2(src, dst)
+            print(f"  Copied {name} to research-note/figures/")
+    print()
 
 
 if __name__ == "__main__":

@@ -895,7 +895,7 @@ def plot_pp_policy_heatmap(policy_df, save_path=None):
     plt.ylabel("Score Differential (Ref Team)")
     
     if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=600, bbox_inches='tight')
         plt.close()
     else:
         plt.show()
