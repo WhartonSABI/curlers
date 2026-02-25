@@ -5,6 +5,9 @@
 # archived files and folders
 archive/
 
+# competition
+competition
+
 # finder
 .DS_Store
 
