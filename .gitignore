@@ -5,6 +5,9 @@
 # archived files and folders
 archive/
 
+# app metadata
+app/
+
 # competition
 competition
 
@@ -12,7 +15,11 @@ competition
 .DS_Store
 
 # submission folders
-csas2026*
+csas2026/
+
+# tex source
+*.tex
+*.sty
 
 ##############
 ### PYTHON ###
