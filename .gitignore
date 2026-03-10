@@ -3,7 +3,7 @@
 #######################
 
 # archived files and folders
-archive/
+archived/
 
 # app metadata
 app/
@@ -13,6 +13,9 @@ competition
 
 # finder
 .DS_Store
+
+# internal files
+internal
 
 # submission folders
 csas2026/
