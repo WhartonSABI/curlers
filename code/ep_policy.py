@@ -872,7 +872,7 @@ def compute_pp_policy_heatmap(
     return pd.DataFrame(policy_rows)
 
 
-def plot_pp_policy_heatmap(policy_df, save_path=None):
+def plot_pp_policy_heatmap(policy_df, save_path=None, for_poster=False):
     """
     Plot optimal PP policy heatmap showing value difference.
     Blue = Use PP (positive value), Red = Save PP (negative value).
@@ -883,6 +883,8 @@ def plot_pp_policy_heatmap(policy_df, save_path=None):
         Policy dataframe from compute_pp_policy_heatmap()
     save_path : str, optional
         Path to save plot
+    for_poster : bool, default False
+        If True, omit title and subtitle for poster use
     """
     # Plot value difference (win probability improvement)
     pivot_value = policy_df.pivot(index="ScoreDiff", columns="EndID", values="ValueDiff")
@@ -890,7 +892,8 @@ def plot_pp_policy_heatmap(policy_df, save_path=None):
     # Blue for positive (use PP), Red for negative (save PP)
     sns.heatmap(pivot_value, cmap="RdBu", center=0, annot=True, fmt=".3f",
                 cbar_kws={'label': 'ΔWP (Use PP - Save PP)'})
-    plt.title("Optimal Power Play Policy\nBlue = Use PP, Red = Save PP")
+    if not for_poster:
+        plt.title("Optimal Power Play Policy\nBlue = Use PP, Red = Save PP")
     plt.xlabel("End")
     plt.ylabel("Score Differential (Ref Team)")
     

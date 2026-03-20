@@ -98,8 +98,14 @@ def analyze_pp_decision_states(end_level_df, elo_ratings):
     return decision_points
 
 
-def plot_pp_decision_distributions(decision_points, save_dir):
-    """Plot distributions of game states where PP decisions are made."""
+def plot_pp_decision_distributions(decision_points, save_dir, for_poster=False):
+    """Plot distributions of game states where PP decisions are made.
+    
+    Parameters
+    ----------
+    for_poster : bool, default False
+        If True, use poster-specific titles (e.g. subtitle as main title for heatmaps)
+    """
     
     # Plot 1: Distribution by end
     plt.figure(figsize=(12, 6))
@@ -216,7 +222,10 @@ def plot_pp_decision_distributions(decision_points, save_dir):
                 cbar_kws={'label': 'PP Usage Rate'}, mask=heatmap_data.isna())
     plt.xlabel("End Number")
     plt.ylabel("Score Differential (Ref - Opp)")
-    plt.title("PP Usage Rate Heatmap\n(Fraction of teams using PP by game state)")
+    if for_poster:
+        plt.title("Fraction of teams using PP by game state")
+    else:
+        plt.title("PP Usage Rate Heatmap\n(Fraction of teams using PP by game state)")
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, "pp_usage_heatmap.png"), dpi=600, bbox_inches='tight')
     plt.close()

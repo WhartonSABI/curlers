@@ -230,8 +230,14 @@ def aggregate_by_team(results_df):
     return team_stats
 
 
-def plot_team_performance(team_stats, save_dir):
-    """Plot team-level PP decision performance."""
+def plot_team_performance(team_stats, save_dir, for_poster=False):
+    """Plot team-level PP decision performance.
+    
+    Parameters
+    ----------
+    for_poster : bool, default False
+        If True, use poster-specific titles (remove subtitles, keep "closer to 0" for perf plot)
+    """
     
     # Filter to teams with at least 5 decisions
     team_stats_filtered = team_stats[team_stats["NumDecisions"] >= 5].copy()
@@ -252,7 +258,10 @@ def plot_team_performance(team_stats, save_dir):
     labels = top_teams["TeamName"].fillna(top_teams["TeamID"].astype(str)).tolist()
     plt.yticks(range(len(top_teams)), labels)
     plt.xlabel("Total Win Probability Difference (Actual - Optimal)")
-    plt.title("PP Decision Performance by Team\n(All teams ranked by total WP difference, ≥5 decisions)\nCloser to 0 = better (optimal decisions)")
+    if for_poster:
+        plt.title("PP Decision Performance by Team\nCloser to 0 = better")
+    else:
+        plt.title("PP Decision Performance by Team\n(All teams ranked by total WP difference, ≥5 decisions)\nCloser to 0 = better (optimal decisions)")
     plt.axvline(x=0, color='black', linestyle='--', linewidth=2, label='Optimal (0)')
     plt.legend()
     plt.grid(axis='x', alpha=0.3)
@@ -272,7 +281,10 @@ def plot_team_performance(team_stats, save_dir):
     plt.yticks(range(len(top_teams)), labels)
     plt.gca().invert_yaxis()
     plt.xlabel("Decision Accuracy (Fraction of Optimal Decisions)")
-    plt.title("PP Decision Accuracy by Team\n(All teams ranked by total WP difference, ≥5 decisions)")
+    if for_poster:
+        plt.title("PP Decision Accuracy by Team")
+    else:
+        plt.title("PP Decision Accuracy by Team\n(All teams ranked by total WP difference, ≥5 decisions)")
     # Dynamic zoom: cap at observed max (rounded up to nearest 0.005)
     step = 0.005
     acc_upper = float(np.ceil(acc_max / step) * step)
@@ -286,8 +298,14 @@ def plot_team_performance(team_stats, save_dir):
     plt.close()
 
 
-def plot_decision_patterns(results_df, save_dir):
-    """Plot patterns in PP decision making."""
+def plot_decision_patterns(results_df, save_dir, for_poster=False):
+    """Plot patterns in PP decision making.
+    
+    Parameters
+    ----------
+    for_poster : bool, default False
+        If True, use poster-specific titles (subtitle as main title for heatmaps)
+    """
     
     # Plot 1: Average WP difference (actual - optimal) by end
     plt.figure(figsize=(10, 6))
@@ -381,7 +399,10 @@ def plot_decision_patterns(results_df, save_dir):
                 cbar_kws={'label': 'Optimal Decision Rate\n(1.0 = always optimal)'})
     plt.xlabel("End Number")
     plt.ylabel("Score Differential")
-    plt.title("PP Decision Accuracy Heatmap\n(Fraction of Optimal Decisions by Situation)")
+    if for_poster:
+        plt.title("Fraction of Optimal Decisions by Situation")
+    else:
+        plt.title("PP Decision Accuracy Heatmap\n(Fraction of Optimal Decisions by Situation)")
     plt.tight_layout()
     plt.savefig(os.path.join(save_dir, "pp_accuracy_heatmap.png"), dpi=600, bbox_inches='tight')
     plt.close()
