@@ -218,7 +218,7 @@ def plot_pp_decision_distributions(decision_points, save_dir, for_poster=False):
     count_data = count_data.loc[score_mask, end_mask]
     heatmap_data = heatmap_data.where(count_data >= 3)
     
-    sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="YlOrRd", vmin=0, vmax=1,
+    sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="Blues", vmin=0, vmax=1,
                 cbar_kws={'label': 'PP Usage Rate'}, mask=heatmap_data.isna())
     plt.xlabel("End Number")
     plt.ylabel("Score Differential (Ref - Opp)")
