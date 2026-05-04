@@ -145,7 +145,19 @@ def compute_use_save_values(
 
 
 def main():
-    st.set_page_config(page_title="Power Play Recommender", layout="centered")
+    st.set_page_config(page_title="Power Play Recommender", layout="wide")
+    st.markdown(
+        """
+        <style>
+        .block-container {
+            max-width: 1400px;
+            padding-top: 1.5rem;
+            padding-bottom: 1.5rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     st.title("Power Play Recommender")
     st.write(
         "Enter the current game state and team strength information to get a "
