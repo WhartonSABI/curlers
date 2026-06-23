@@ -22,7 +22,7 @@ import seaborn as sns
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from data_prep import prepare_ends, load_data, build_start_of_end_df
-from elo import compute_elo_ratings
+from team_strength import compute_bt_ratings
 
 
 def compute_pp_availability_at_start(end_level_df):
@@ -51,7 +51,7 @@ def compute_pp_availability_at_start(end_level_df):
     return df
 
 
-def analyze_pp_decision_states(end_level_df, elo_ratings):
+def analyze_pp_decision_states(end_level_df, bt_ratings):
     """
     Analyze game states where PP decisions are made.
     
@@ -59,8 +59,8 @@ def analyze_pp_decision_states(end_level_df, elo_ratings):
     ----------
     end_level_df : pd.DataFrame
         End-level dataframe with PP decision information
-    elo_ratings : dict
-        Dictionary mapping TeamID to Elo rating
+    bt_ratings : dict
+        Dictionary mapping TeamID to Bradley-Terry ability
     
     Returns
     -------
@@ -77,10 +77,12 @@ def analyze_pp_decision_states(end_level_df, elo_ratings):
         (end_level_df["EndID"].between(1, 8))
     ].copy()
     
-    # Add Elo difference
-    decision_points["RefTeamElo"] = decision_points["RefTeamID"].map(elo_ratings).fillna(1500.0)
-    decision_points["OppTeamElo"] = decision_points["OppTeamID"].map(elo_ratings).fillna(1500.0)
-    decision_points["RefEloDiff"] = decision_points["RefTeamElo"] - decision_points["OppTeamElo"]
+    # Add Bradley-Terry ability difference
+    decision_points["RefTeamBTAbility"] = decision_points["RefTeamID"].map(bt_ratings).fillna(0.0)
+    decision_points["OppTeamBTAbility"] = decision_points["OppTeamID"].map(bt_ratings).fillna(0.0)
+    decision_points["RefBTAbilityDiff"] = (
+        decision_points["RefTeamBTAbility"] - decision_points["OppTeamBTAbility"]
+    )
     
     # Add decision made
     decision_points["UsedPP"] = (decision_points["PPUsedThisEnd"] == 1).astype(int)
@@ -230,17 +232,17 @@ def plot_pp_decision_distributions(decision_points, save_dir, for_poster=False):
     plt.savefig(os.path.join(save_dir, "pp_usage_heatmap.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
-    # Plot 6: Distribution of Elo differences at decision points
+    # Plot 6: Distribution of Bradley-Terry ability differences at decision points
     plt.figure(figsize=(10, 6))
-    plt.hist(decision_points["RefEloDiff"], bins=30, color='steelblue', alpha=0.7, edgecolor='black')
-    plt.xlabel("Elo Difference (Ref Team - Opponent)")
+    plt.hist(decision_points["RefBTAbilityDiff"], bins=30, color='steelblue', alpha=0.7, edgecolor='black')
+    plt.xlabel("BT Ability Difference (Ref Team - Opponent)")
     plt.ylabel("Number of PP Decision Points")
-    plt.title("Distribution of Elo Differences at PP Decision Points")
-    plt.axvline(x=0, color='red', linestyle='--', linewidth=1, label='Equal Elo')
+    plt.title("Distribution of BT Ability Differences at PP Decision Points")
+    plt.axvline(x=0, color='red', linestyle='--', linewidth=1, label='Equal ability')
     plt.legend()
     plt.grid(axis='y', alpha=0.3)
     plt.tight_layout()
-    plt.savefig(os.path.join(save_dir, "pp_decisions_elo_distribution.png"), dpi=600, bbox_inches='tight')
+    plt.savefig(os.path.join(save_dir, "pp_decisions_bt_ability_distribution.png"), dpi=600, bbox_inches='tight')
     plt.close()
     
     # Plot 7: Opponent PP availability at decision points
@@ -339,14 +341,14 @@ def main():
     end_level_df = build_start_of_end_df(ends_prep, stones, games)
     print(f"Built {len(end_level_df):,} end-level rows")
     
-    # Compute Elo ratings
-    print("Computing Elo ratings...")
-    elo_ratings = compute_elo_ratings(games)
-    print(f"Computed Elo ratings for {len(elo_ratings):,} teams")
+    # Compute ridge Bradley-Terry abilities
+    print("Computing ridge Bradley-Terry abilities...")
+    bt_ratings = compute_bt_ratings(games)
+    print(f"Computed BT abilities for {len(bt_ratings):,} teams")
     
     # Analyze PP decision states
     print("Analyzing PP decision states...")
-    decision_points = analyze_pp_decision_states(end_level_df, elo_ratings)
+    decision_points = analyze_pp_decision_states(end_level_df, bt_ratings)
     print(f"Found {len(decision_points):,} PP decision points")
     
     # Print summary statistics
@@ -366,7 +368,7 @@ def main():
         "RefPPAvailableAtStart",
         "OppPPAvailableBeforeEnd",
         "UsedPP",
-        "RefEloDiff",
+        "RefBTAbilityDiff",
         "EndsRemaining"
     ]
     decision_points[output_cols].to_csv(

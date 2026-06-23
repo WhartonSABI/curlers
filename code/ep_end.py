@@ -25,7 +25,7 @@ EP_FEATURE_COLS = [
     "PPUsedThisEnd",  # 1 if ref uses PP, -1 if opp uses PP, 0 if neither
     "RefPPAvailableBeforeEnd",  # 1 if ref PP available, 0 otherwise
     "OppPPAvailableBeforeEnd",  # 1 if opp PP available, 0 otherwise
-    "RefEloDiff",  # Optional: Elo difference (ref - opp)
+    "RefBTAbilityDiff",  # Bradley-Terry ability difference (ref - opp)
 ]
 
 
@@ -184,8 +184,8 @@ def train_end_differential_distribution_model(
         sample_weights = train_df["ClassLabel"].map(class_weights).values
     
     mono_constraints = [0] * len(EP_FEATURE_COLS)
-    if "RefEloDiff" in EP_FEATURE_COLS:
-        mono_constraints[EP_FEATURE_COLS.index("RefEloDiff")] = 1
+    if "RefBTAbilityDiff" in EP_FEATURE_COLS:
+        mono_constraints[EP_FEATURE_COLS.index("RefBTAbilityDiff")] = 1
     monotone_constraints = "(" + ",".join(str(v) for v in mono_constraints) + ")"
 
     model = XGBClassifier(
@@ -295,7 +295,7 @@ def train_early_quit_model(end_df, test_size=0.2, random_state=8):
         "RefScoreDiffStartOfEnd",
         "RefPPAvailableBeforeEnd",
         "OppPPAvailableBeforeEnd",
-        "RefEloDiff"
+        "RefBTAbilityDiff"
     ]
     
     X_train = train_df[early_quit_features].copy()
@@ -346,7 +346,7 @@ def predict_early_quit_probability(row, model):
         "RefScoreDiffStartOfEnd",
         "RefPPAvailableBeforeEnd",
         "OppPPAvailableBeforeEnd",
-        "RefEloDiff"
+        "RefBTAbilityDiff"
     ]
     
     row_df = pd.DataFrame([row])

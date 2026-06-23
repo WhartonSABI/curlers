@@ -22,11 +22,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import defaultdict
 from ep_end import predict_end_differential_distribution, predict_early_quit_probability
+from team_strength import bt_win_probability
 
 
 def extra_end_value(score_diff, hammer, ref_pp_avail, opp_pp_avail, 
                    extra_end_ep_model, extra_end_differential_classes, extra_end_class_to_diff,
-                   value_cache, elo_diff=0.0, max_extra_ends=5):
+                   value_cache, bt_ability_diff=0.0, max_extra_ends=5,
+                   bt_bucket_size=0.1):
     """
     Compute value for extra end continuation (infinite horizon approximation).
     
@@ -53,8 +55,10 @@ def extra_end_value(score_diff, hammer, ref_pp_avail, opp_pp_avail,
         Mapping from class index to differential value
     value_cache : dict
         Memoization cache
-    elo_diff : float, default=0.0
-        Elo difference (ref - opp)
+    bt_ability_diff : float, default=0.0
+        Bradley-Terry ability difference (ref - opp)
+    bt_bucket_size : float, default=0.1
+        Size of Bradley-Terry ability buckets for caching
     max_extra_ends : int, default=5
         Maximum number of extra ends to simulate
     
@@ -69,17 +73,14 @@ def extra_end_value(score_diff, hammer, ref_pp_avail, opp_pp_avail,
     elif score_diff < 0:
         return 0.0
     
-    # If we've simulated too many extra ends, use Elo-based tie-breaker
+    # If we've simulated too many extra ends, use BT-based tie-breaker
     # (This shouldn't happen often, but prevents infinite recursion)
     if max_extra_ends <= 0:
-        if elo_diff == 0.0:
-            return 0.5
-        else:
-            return 1.0 / (1.0 + 10.0 ** (-elo_diff / 400.0))
+        return bt_win_probability(bt_ability_diff)
     
     # Cache key for extra ends
-    elo_bucket = round(elo_diff / 50.0) * 50.0
-    cache_key = ("extra", score_diff, hammer, ref_pp_avail, opp_pp_avail, elo_bucket, max_extra_ends)
+    bt_bucket = round(bt_ability_diff / bt_bucket_size) * bt_bucket_size
+    cache_key = ("extra", score_diff, hammer, ref_pp_avail, opp_pp_avail, bt_bucket, max_extra_ends)
     if cache_key in value_cache:
         return value_cache[cache_key]
     
@@ -91,7 +92,7 @@ def extra_end_value(score_diff, hammer, ref_pp_avail, opp_pp_avail,
         "PPUsedThisEnd": 0,
         "RefPPAvailableBeforeEnd": ref_pp_avail,
         "OppPPAvailableBeforeEnd": opp_pp_avail,
-        "RefEloDiff": elo_diff
+        "RefBTAbilityDiff": bt_ability_diff
     })
     
     # Power Play cannot be used in extra ends
@@ -125,7 +126,7 @@ def extra_end_value(score_diff, hammer, ref_pp_avail, opp_pp_avail,
                 next_value = extra_end_value(
                     next_score, next_hammer_val, next_ref_pp, next_opp_pp,
                     extra_end_ep_model, extra_end_differential_classes, extra_end_class_to_diff,
-                    value_cache, elo_diff, max_extra_ends - 1
+                    value_cache, bt_ability_diff, max_extra_ends - 1, bt_bucket_size
                 )
                 
                 expected_value += prob * next_value
@@ -141,7 +142,7 @@ def extra_end_value(score_diff, hammer, ref_pp_avail, opp_pp_avail,
     return best_value
 
 
-def terminal_value(score_diff, elo_diff=0.0):
+def terminal_value(score_diff, bt_ability_diff=0.0):
     """
     Terminal value function for regular game end (after end 8).
     
@@ -149,8 +150,8 @@ def terminal_value(score_diff, elo_diff=0.0):
     ----------
     score_diff : int
         Final score differential (ref - opp)
-    elo_diff : float, default=0.0
-        Elo difference (ref - opp) - not used for regular game end
+    bt_ability_diff : float, default=0.0
+        Bradley-Terry ability difference (ref - opp) - not used for regular game end
     
     Returns
     -------
@@ -222,8 +223,8 @@ def dp_value(
     differential_classes,
     class_to_diff,
     value_cache,
-    elo_diff=0.0,
-    elo_bucket_size=50.0,
+    bt_ability_diff=0.0,
+    bt_bucket_size=0.1,
     score_diff_clip=(-10, 10),
     early_quit_model=None,
     extra_end_ep_model=None,
@@ -236,7 +237,7 @@ def dp_value(
     Note on selection bias: PP usage is not randomized. Teams choose PP based on
     game context (score, end, opponent strength, etc.). The EP model captures
     both the causal effect of PP and selection effects. We include key confounders
-    (EndsRemaining, ScoreDiffStartOfEnd, EloDiff, hammer, PP availability) to mitigate this, but the
+    (EndsRemaining, ScoreDiffStartOfEnd, BTAbilityDiff, hammer, PP availability) to mitigate this, but the
     estimated PP effect should be interpreted as observational, not causal.
     
     Parameters
@@ -258,11 +259,11 @@ def dp_value(
     class_to_diff : dict
         Mapping from class index to differential value for regular ends
     value_cache : dict
-        Memoization cache for computed values (key includes elo_bucket)
-    elo_diff : float, default=0.0
-        Elo difference (ref - opp) for EP prediction
-    elo_bucket_size : float, default=50.0
-        Size of Elo buckets for caching
+        Memoization cache for computed values (key includes bt_bucket)
+    bt_ability_diff : float, default=0.0
+        Bradley-Terry ability difference (ref - opp) for EP prediction
+    bt_bucket_size : float, default=0.1
+        Size of Bradley-Terry ability buckets for caching
     score_diff_clip : tuple, default=(-10, 10)
         (min, max) score differential to clip to
     early_quit_model : XGBClassifier, optional
@@ -287,7 +288,7 @@ def dp_value(
         # Extra ends: use regular EP model with EndsRemaining=0, process one end at a time
         # If someone already scored, game ends
         if score_diff != 0:
-            return terminal_value(score_diff, elo_diff)
+            return terminal_value(score_diff, bt_ability_diff)
         
         # For extra ends, use regular EP model with EndsRemaining=0
         # Process one extra end at a time (continue until someone scores)
@@ -299,7 +300,7 @@ def dp_value(
             "PPUsedThisEnd": 0,
             "RefPPAvailableBeforeEnd": ref_pp_avail,
             "OppPPAvailableBeforeEnd": opp_pp_avail,
-            "RefEloDiff": elo_diff
+            "RefBTAbilityDiff": bt_ability_diff
         })
         
         # Power Play cannot be used in extra ends
@@ -331,7 +332,7 @@ def dp_value(
                     # If someone scores, game ends; if blank, continue to next extra end
                     if next_score != 0:
                         # Someone scored - game ends
-                        expected_value += prob * terminal_value(next_score, elo_diff)
+                        expected_value += prob * terminal_value(next_score, bt_ability_diff)
                     else:
                         # Blank end - continue to next extra end (recursive call)
                         # Cap recursion to prevent infinite loops
@@ -339,16 +340,13 @@ def dp_value(
                             next_value = dp_value(
                                 end + 1, next_score, next_hammer_val, next_ref_pp, next_opp_pp,
                                 ep_model, differential_classes, class_to_diff, value_cache,
-                                elo_diff, elo_bucket_size, score_diff_clip,
+                                bt_ability_diff, bt_bucket_size, score_diff_clip,
                                 early_quit_model, None, None, None  # No separate extra end model
                             )
                             expected_value += prob * next_value
                         else:
-                            # Too many extra ends - use Elo-based tie-breaker
-                            if elo_diff == 0.0:
-                                expected_value += prob * 0.5
-                            else:
-                                expected_value += prob * (1.0 / (1.0 + 10.0 ** (-elo_diff / 400.0)))
+                            # Too many extra ends - use BT-based tie-breaker
+                            expected_value += prob * bt_win_probability(bt_ability_diff)
             
             # For opp's turn, they minimize ref's value
             if hammer == 0 and opp_pp_avail == 1:
@@ -361,9 +359,9 @@ def dp_value(
         
         return best_value
     
-    # Check cache (include elo_diff to avoid mixing values across Elo scenarios)
-    elo_bucket = round(elo_diff / elo_bucket_size) * elo_bucket_size
-    state_key = (end, score_diff, hammer, ref_pp_avail, opp_pp_avail, elo_bucket)
+    # Check cache (include bt_ability_diff to avoid mixing values across strength scenarios)
+    bt_bucket = round(bt_ability_diff / bt_bucket_size) * bt_bucket_size
+    state_key = (end, score_diff, hammer, ref_pp_avail, opp_pp_avail, bt_bucket)
     if state_key in value_cache:
         return value_cache[state_key]
     
@@ -376,7 +374,7 @@ def dp_value(
             "RefScoreDiffStartOfEnd": score_diff,
             "RefPPAvailableBeforeEnd": ref_pp_avail,
             "OppPPAvailableBeforeEnd": opp_pp_avail,
-            "RefEloDiff": elo_diff
+            "RefBTAbilityDiff": bt_ability_diff
         })
         early_quit_prob = predict_early_quit_probability(state_row_for_quit, early_quit_model)
     
@@ -389,7 +387,7 @@ def dp_value(
         "PPUsedThisEnd": 0,  # Will be set based on action: 1 if ref uses, -1 if opp uses, 0 if neither
         "RefPPAvailableBeforeEnd": ref_pp_avail,
         "OppPPAvailableBeforeEnd": opp_pp_avail,
-        "RefEloDiff": elo_diff
+        "RefBTAbilityDiff": bt_ability_diff
     })
     
     # Determine available actions
@@ -441,10 +439,10 @@ def dp_value(
                         next_value = extra_end_value(
                             next_score, next_hammer_val, next_ref_pp, next_opp_pp,
                             extra_end_ep_model, extra_end_differential_classes, extra_end_class_to_diff,
-                            value_cache, elo_diff
+                            value_cache, bt_ability_diff
                         )
                     else:
-                        next_value = terminal_value(next_score, elo_diff)
+                        next_value = terminal_value(next_score, bt_ability_diff)
                 else:
                     # Regular end: recursive call
                     next_value = dp_value(
@@ -457,8 +455,8 @@ def dp_value(
                         differential_classes,
                         class_to_diff,
                         value_cache,
-                        elo_diff,
-                        elo_bucket_size,
+                        bt_ability_diff,
+                        bt_bucket_size,
                         score_diff_clip,
                         early_quit_model,
                         extra_end_ep_model,
@@ -468,7 +466,7 @@ def dp_value(
                 
                 # If game ends early after this end, use terminal value at end outcome
                 if early_quit_prob > 0 and end <= 7:
-                    early_quit_value = terminal_value(next_score, elo_diff)
+                    early_quit_value = terminal_value(next_score, bt_ability_diff)
                     expected_value += prob * early_quit_prob * early_quit_value
                 
                 # With probability (1 - early_quit_prob), game continues
@@ -500,8 +498,8 @@ def pp_action_value(
     differential_classes,
     class_to_diff,
     value_cache,
-    elo_diff=0.0,
-    elo_bucket_size=50.0,
+    bt_ability_diff=0.0,
+    bt_bucket_size=0.1,
     score_diff_clip=(-10, 10),
     early_quit_model=None,
     extra_end_ep_model=None,
@@ -531,7 +529,7 @@ def pp_action_value(
             "RefScoreDiffStartOfEnd": score_diff,
             "RefPPAvailableBeforeEnd": ref_pp_avail,
             "OppPPAvailableBeforeEnd": opp_pp_avail,
-            "RefEloDiff": elo_diff
+            "RefBTAbilityDiff": bt_ability_diff
         })
         early_quit_prob = predict_early_quit_probability(state_row_for_quit, early_quit_model)
 
@@ -544,7 +542,7 @@ def pp_action_value(
         "PPUsedThisEnd": 0,  # Will be set based on action
         "RefPPAvailableBeforeEnd": ref_pp_avail,
         "OppPPAvailableBeforeEnd": opp_pp_avail,
-        "RefEloDiff": elo_diff
+        "RefBTAbilityDiff": bt_ability_diff
     })
 
     # Set PP action in state: 1 if ref uses, -1 if opp uses, 0 if neither
@@ -583,8 +581,8 @@ def pp_action_value(
             differential_classes,
             class_to_diff,
             value_cache,
-            elo_diff,
-            elo_bucket_size,
+            bt_ability_diff,
+            bt_bucket_size,
             score_diff_clip,
             early_quit_model,
             extra_end_ep_model,
@@ -593,7 +591,7 @@ def pp_action_value(
         )
 
         if early_quit_prob > 0 and end <= 7:
-            expected_value += prob * early_quit_prob * terminal_value(next_score, elo_diff)
+            expected_value += prob * early_quit_prob * terminal_value(next_score, bt_ability_diff)
 
         continue_prob = 1.0 - early_quit_prob if early_quit_prob > 0 else 1.0
         expected_value += continue_prob * prob * next_value
@@ -611,8 +609,8 @@ def optimal_pp_policy(
     differential_classes,
     class_to_diff,
     value_cache,
-    elo_diff=0.0,
-    elo_bucket_size=50.0,
+    bt_ability_diff=0.0,
+    bt_bucket_size=0.1,
     score_diff_clip=(-10, 10),
     early_quit_model=None,
     extra_end_ep_model=None,
@@ -646,8 +644,8 @@ def optimal_pp_policy(
         Mapping from class index to differential value
     value_cache : dict
         Memoization cache (shared with dp_value)
-    elo_diff : float, default=0.0
-        Elo difference (ref - opp) for EP prediction
+    bt_ability_diff : float, default=0.0
+        Bradley-Terry ability difference (ref - opp) for EP prediction
     
     Returns
     -------
@@ -668,8 +666,8 @@ def optimal_pp_policy(
         differential_classes,
         class_to_diff,
         value_cache,
-        elo_diff,
-        elo_bucket_size,
+        bt_ability_diff,
+        bt_bucket_size,
         score_diff_clip,
         early_quit_model,
         extra_end_ep_model,
@@ -688,8 +686,8 @@ def optimal_pp_policy(
         differential_classes,
         class_to_diff,
         value_cache,
-        elo_diff,
-        elo_bucket_size,
+        bt_ability_diff,
+        bt_bucket_size,
         score_diff_clip,
         early_quit_model,
         extra_end_ep_model,
@@ -702,12 +700,12 @@ def optimal_pp_policy(
     return (action, value_diff)
 
 
-def test_elo_bucket_sizes(
+def test_bt_bucket_sizes(
     end_df,
     ep_model,
     differential_classes,
     class_to_diff,
-    bucket_sizes=[10.0, 25.0, 50.0, 100.0, 200.0],
+    bucket_sizes=[0.05, 0.1, 0.25, 0.5, 1.0],
     test_states=None,
     early_quit_model=None,
     extra_end_ep_model=None,
@@ -715,7 +713,7 @@ def test_elo_bucket_sizes(
     extra_end_class_to_diff=None
 ):
     """
-    Test different Elo bucket sizes to find the most effective one.
+    Test different Bradley-Terry ability bucket sizes to find the most effective one.
     
     Parameters
     ----------
@@ -727,10 +725,10 @@ def test_elo_bucket_sizes(
         Array of possible differential values
     class_to_diff : dict
         Mapping from class index to differential value
-    bucket_sizes : list, default=[10.0, 25.0, 50.0, 100.0, 200.0]
-        List of Elo bucket sizes to test
+    bucket_sizes : list, default=[0.05, 0.1, 0.25, 0.5, 1.0]
+        List of Bradley-Terry ability bucket sizes to test
     test_states : list, optional
-        List of (end, score_diff, hammer, ref_pp, opp_pp, elo_diff) tuples to test
+        List of (end, score_diff, hammer, ref_pp, opp_pp, bt_ability_diff) tuples to test
         If None, generates default test states
     early_quit_model : XGBClassifier, optional
         Early quit model
@@ -754,8 +752,8 @@ def test_elo_bucket_sizes(
                 for hammer in [0, 1]:
                     for ref_pp in [0, 1]:
                         for opp_pp in [0, 1]:
-                            for elo_diff in [-100, 0, 100]:
-                                test_states.append((end, score_diff, hammer, ref_pp, opp_pp, elo_diff))
+                            for bt_ability_diff in [-1.0, 0.0, 1.0]:
+                                test_states.append((end, score_diff, hammer, ref_pp, opp_pp, bt_ability_diff))
     
     results = []
     score_diff_clip = (-10, 10)
@@ -766,7 +764,7 @@ def test_elo_bucket_sizes(
         total_calls = 0
         value_diffs = []
         
-        for end, score_diff, hammer, ref_pp, opp_pp, elo_diff in test_states:
+        for end, score_diff, hammer, ref_pp, opp_pp, bt_ability_diff in test_states:
             # Clear cache to test fresh
             value_cache.clear()
             
@@ -774,7 +772,7 @@ def test_elo_bucket_sizes(
             v1 = dp_value(
                 end, score_diff, hammer, ref_pp, opp_pp,
                 ep_model, differential_classes, class_to_diff, value_cache,
-                elo_diff, bucket_size, score_diff_clip,
+                bt_ability_diff, bucket_size, score_diff_clip,
                 early_quit_model, extra_end_ep_model,
                 extra_end_differential_classes, extra_end_class_to_diff
             )
@@ -786,7 +784,7 @@ def test_elo_bucket_sizes(
             v2 = dp_value(
                 end, score_diff, hammer, ref_pp, opp_pp,
                 ep_model, differential_classes, class_to_diff, value_cache2,
-                elo_diff, bucket_size, score_diff_clip,
+                bt_ability_diff, bucket_size, score_diff_clip,
                 early_quit_model, extra_end_ep_model,
                 extra_end_differential_classes, extra_end_class_to_diff
             )
@@ -818,9 +816,9 @@ def compute_pp_policy_heatmap(
     differential_classes,
     class_to_diff,
     score_range=(-5, 5),
-    elo_diff=0.0,
+    bt_ability_diff=0.0,
     opp_pp_avail=1,
-    elo_bucket_size=50.0,
+    bt_bucket_size=0.1,
     score_diff_clip=(-10, 10),
     early_quit_model=None,
     extra_end_ep_model=None,
@@ -840,8 +838,8 @@ def compute_pp_policy_heatmap(
         Mapping from class index to differential value
     score_range : tuple, default=(-5, 5)
         Range of score differentials to evaluate
-    elo_diff : float, default=0.0
-        Elo difference (ref - opp) for EP prediction
+    bt_ability_diff : float, default=0.0
+        Bradley-Terry ability difference (ref - opp) for EP prediction
     opp_pp_avail : int, default=1
         1 if opponent PP still available (worst case), 0 if already used
     
@@ -858,8 +856,8 @@ def compute_pp_policy_heatmap(
             # Only compute for states where ref has hammer and PP available
             action, value_diff = optimal_pp_policy(
                 end, score_diff, 1, 1, opp_pp_avail,
-                ep_model, differential_classes, class_to_diff, value_cache, elo_diff,
-                elo_bucket_size, score_diff_clip, early_quit_model,
+                ep_model, differential_classes, class_to_diff, value_cache, bt_ability_diff,
+                bt_bucket_size, score_diff_clip, early_quit_model,
                 extra_end_ep_model, extra_end_differential_classes, extra_end_class_to_diff
             )
             policy_rows.append({
@@ -988,4 +986,3 @@ def compute_pp_delta_ep(
         rows.append(output_row)
     
     return pd.DataFrame(rows)
-

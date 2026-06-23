@@ -26,7 +26,7 @@ from ep_end import (
     train_early_quit_model,
 )
 from ep_policy import compute_pp_policy_heatmap, plot_pp_policy_heatmap
-from elo import compute_elo_ratings
+from team_strength import compute_bt_ratings
 from eda_pp_decisions import analyze_pp_decision_states, plot_pp_decision_distributions
 from evaluate_pp_decisions import (
     evaluate_pp_decisions,
@@ -69,16 +69,16 @@ def main():
         print(f"  Warning: {e}")
         early_quit_model = None
 
-    elo_ratings = compute_elo_ratings(games_df)
-    elo_bucket_size = 10.0
+    bt_ratings = compute_bt_ratings(games_df)
+    bt_bucket_size = 0.1
     score_diff_clip = (-10, 10)
 
     # 1. Optimal policy plots (no title/subtitle)
     print("Generating optimal policy heatmaps...")
     pp_policy_opp_saved = compute_pp_policy_heatmap(
         ep_model, differential_classes, class_to_diff,
-        score_range=(-5, 5), elo_diff=0.0, opp_pp_avail=1,
-        elo_bucket_size=elo_bucket_size,
+        score_range=(-5, 5), bt_ability_diff=0.0, opp_pp_avail=1,
+        bt_bucket_size=bt_bucket_size,
         score_diff_clip=score_diff_clip,
         early_quit_model=early_quit_model,
         extra_end_ep_model=None,
@@ -93,8 +93,8 @@ def main():
 
     pp_policy_opp_used = compute_pp_policy_heatmap(
         ep_model, differential_classes, class_to_diff,
-        score_range=(-5, 5), elo_diff=0.0, opp_pp_avail=0,
-        elo_bucket_size=elo_bucket_size,
+        score_range=(-5, 5), bt_ability_diff=0.0, opp_pp_avail=0,
+        bt_bucket_size=bt_bucket_size,
         score_diff_clip=score_diff_clip,
         early_quit_model=early_quit_model,
         extra_end_ep_model=None,
@@ -109,7 +109,7 @@ def main():
 
     # 2. Observed PP usage heatmap (subtitle as main title)
     print("Generating observed PP usage heatmap...")
-    decision_points = analyze_pp_decision_states(end_level_df, elo_ratings)
+    decision_points = analyze_pp_decision_states(end_level_df, bt_ratings)
     plot_pp_decision_distributions(
         decision_points, poster_figures, for_poster=True
     )
@@ -118,8 +118,8 @@ def main():
     print("Evaluating PP decisions...")
     results_df = evaluate_pp_decisions(
         end_level_df, ep_model, differential_classes, class_to_diff,
-        early_quit_model, elo_ratings,
-        elo_bucket_size=elo_bucket_size,
+        early_quit_model, bt_ratings,
+        bt_bucket_size=bt_bucket_size,
         score_diff_clip=score_diff_clip,
     )
 

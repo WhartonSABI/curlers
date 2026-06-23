@@ -428,7 +428,7 @@ def add_hammer_team_features(nnshots):
     - HamStonesInHouse, OppStonesInHouse
     - PowerPlay (1 if hammer team using PP this end)
     - HamScoreDiff (score diff from hammer team's perspective)
-    - HamEloDiff (ELO diff from hammer team's perspective)
+    - HamBTAbilityDiff (Bradley-Terry ability diff from hammer team's perspective)
     """
     nnshots = nnshots.copy()
     
@@ -489,11 +489,11 @@ def add_hammer_team_features(nnshots):
         -nnshots["RefScoreDiff"]
     )
     
-    # ELO diff from hammer team's perspective
-    nnshots["HamEloDiff"] = np.where(
+    # Bradley-Terry ability diff from hammer team's perspective
+    nnshots["HamBTAbilityDiff"] = np.where(
         nnshots["RefHasHammer"] == 1,
-        nnshots["RefEloDiff"],
-        -nnshots["RefEloDiff"]
+        nnshots["RefBTAbilityDiff"],
+        -nnshots["RefBTAbilityDiff"]
     )
     
     return nnshots
@@ -642,7 +642,7 @@ def build_start_of_end_df(ends_prep, stones, games=None):
         - PPUsedThisEnd (1 if ref used PP, -1 if opp used PP, 0 if neither)
         - RefPPAvailableBeforeEnd (1 if ref PP available at start, 0 otherwise)
         - OppPPAvailableBeforeEnd (1 if opp PP available at start, 0 otherwise)
-        - RefEloDiff (optional, if games provided)
+        - RefBTAbilityDiff (optional, if games provided)
     """
     # Compute PP availability per team per end (strictly before the end)
     ends_team = ends_prep.copy()
@@ -722,14 +722,14 @@ def build_start_of_end_df(ends_prep, stones, games=None):
     end_df["RefPPAvailableBeforeEnd"] = end_df["PPAvailableBeforeEndTeam_ref"].astype(int)
     end_df["OppPPAvailableBeforeEnd"] = end_df["PPAvailableBeforeEndTeam_opp"].astype(int)
     
-    # Add Elo diff if games provided
+    # Add ridge Bradley-Terry ability diff if games provided
     if games is not None:
-        from elo import compute_elo_ratings
-        elo_ratings = compute_elo_ratings(games)
-        end_df["RefTeamElo"] = end_df["RefTeamID"].map(elo_ratings).fillna(1500.0)
-        end_df["OppTeamElo"] = end_df["OppTeamID"].map(elo_ratings).fillna(1500.0)
-        end_df["RefEloDiff"] = end_df["RefTeamElo"] - end_df["OppTeamElo"]
-        end_df = end_df.drop(columns=["RefTeamElo", "OppTeamElo"])
+        from team_strength import compute_bt_ratings
+        bt_ratings = compute_bt_ratings(games)
+        end_df["RefTeamBTAbility"] = end_df["RefTeamID"].map(bt_ratings).fillna(0.0)
+        end_df["OppTeamBTAbility"] = end_df["OppTeamID"].map(bt_ratings).fillna(0.0)
+        end_df["RefBTAbilityDiff"] = end_df["RefTeamBTAbility"] - end_df["OppTeamBTAbility"]
+        end_df = end_df.drop(columns=["RefTeamBTAbility", "OppTeamBTAbility"])
     
     # Add early quit indicator: game ends before end 8
     max_end_per_game = end_df.groupby(["CompetitionID", "SessionID", "GameID"])["EndID"].max().reset_index()
@@ -754,10 +754,9 @@ def build_start_of_end_df(ends_prep, stones, games=None):
         "EarlyQuit",  # 1 if game ends after this end (early concession)
         "MaxEndInGame"  # Maximum end in this game
     ]
-    if games is not None and "RefEloDiff" in end_df.columns:
-        output_cols.append("RefEloDiff")
+    if games is not None and "RefBTAbilityDiff" in end_df.columns:
+        output_cols.append("RefBTAbilityDiff")
     
     end_df = end_df[output_cols].copy()
     
     return end_df
-

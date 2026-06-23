@@ -24,7 +24,7 @@ PROCESSED_END_PATH = os.path.join(PROJECT_ROOT, "data", "processed", "end_level_
 RAW_DATA_DIR = os.path.join(PROJECT_ROOT, "data", "raw")
 
 SCORE_DIFF_CLIP = (-10, 10)
-DEFAULT_ELO_BUCKET = 50.0
+DEFAULT_BT_BUCKET = 0.1
 
 
 @st.cache_data(show_spinner=False)
@@ -56,7 +56,7 @@ def compute_use_save_values(
     end_id,
     score_diff,
     opp_pp_avail,
-    elo_diff,
+    bt_ability_diff,
     ep_model,
     differential_classes,
     class_to_diff,
@@ -73,7 +73,7 @@ def compute_use_save_values(
             "PPUsedThisEnd": 0,
             "RefPPAvailableBeforeEnd": 1,
             "OppPPAvailableBeforeEnd": opp_pp_avail,
-            "RefEloDiff": elo_diff,
+            "RefBTAbilityDiff": bt_ability_diff,
         }
     )
 
@@ -100,8 +100,8 @@ def compute_use_save_values(
             differential_classes,
             class_to_diff,
             value_cache,
-            elo_diff,
-            DEFAULT_ELO_BUCKET,
+            bt_ability_diff,
+            DEFAULT_BT_BUCKET,
             SCORE_DIFF_CLIP,
             early_quit_model,
             None,
@@ -132,8 +132,8 @@ def compute_use_save_values(
             differential_classes,
             class_to_diff,
             value_cache,
-            elo_diff,
-            DEFAULT_ELO_BUCKET,
+            bt_ability_diff,
+            DEFAULT_BT_BUCKET,
             SCORE_DIFF_CLIP,
             early_quit_model,
             None,
@@ -178,12 +178,13 @@ def main():
         ref_pp_avail = st.radio("Does Ref team have PP available?", ["Yes", "No"], index=0)
         opp_pp_avail = st.radio("Does Opp have PP available?", ["Yes", "No"], index=0)
         st.header("Team Strength")
-        elo_diff = st.number_input(
-            "Elo Differential (Ref - Opp)",
-            min_value=-400,
-            max_value=400,
-            value=0,
-            step=10,
+        bt_ability_diff = st.number_input(
+            "BT Ability Differential (Ref - Opp)",
+            min_value=-3.0,
+            max_value=3.0,
+            value=0.0,
+            step=0.1,
+            format="%.2f",
         )
 
     hammer_flag = 1 if ref_has_hammer == "Yes" else 0
@@ -209,7 +210,7 @@ def main():
         end_id,
         int(score_diff),
         opp_pp_flag,
-        float(elo_diff),
+        float(bt_ability_diff),
         ep_model,
         differential_classes,
         class_to_diff,

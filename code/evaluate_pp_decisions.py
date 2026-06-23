@@ -21,7 +21,7 @@ from ep_end import (
     train_early_quit_model
 )
 from ep_policy import dp_value, pp_action_value
-from elo import compute_elo_ratings
+from team_strength import compute_bt_ratings
 
 
 def compute_pp_availability_at_start(end_level_df):
@@ -60,8 +60,8 @@ def evaluate_pp_decisions(
     differential_classes,
     class_to_diff,
     early_quit_model,
-    elo_ratings,
-    elo_bucket_size=10.0,
+    bt_ratings,
+    bt_bucket_size=0.1,
     score_diff_clip=(-10, 10)
 ):
     """
@@ -79,10 +79,10 @@ def evaluate_pp_decisions(
         Mapping from class index to differential value
     early_quit_model : XGBClassifier
         Early quit model
-    elo_ratings : dict
-        Dictionary mapping TeamID to Elo rating
-    elo_bucket_size : float
-        Elo bucket size for DP
+    bt_ratings : dict
+        Dictionary mapping TeamID to Bradley-Terry ability
+    bt_bucket_size : float
+        Bradley-Terry ability bucket size for DP
     score_diff_clip : tuple
         Score diff clipping range
     
@@ -113,7 +113,7 @@ def evaluate_pp_decisions(
     results = []
     value_cache = {}  # Shared cache for efficiency
     
-    for idx, row in decision_points.iterrows():
+    for processed_count, (_, row) in enumerate(decision_points.iterrows(), start=1):
         # Get game state
         end = int(row["EndID"])
         score_diff = int(row["RefScoreDiffStartOfEnd"])
@@ -121,12 +121,12 @@ def evaluate_pp_decisions(
         ref_pp_avail = 1  # Ref has PP (by filter)
         opp_pp_avail = int(row["OppPPAvailableBeforeEnd"])
         
-        # Get Elo difference
+        # Get Bradley-Terry ability difference
         ref_team = int(row["RefTeamID"])
         opp_team = int(row["OppTeamID"])
-        ref_elo = elo_ratings.get(ref_team, 1500.0)
-        opp_elo = elo_ratings.get(opp_team, 1500.0)
-        elo_diff = ref_elo - opp_elo
+        ref_bt = bt_ratings.get(ref_team, 0.0)
+        opp_bt = bt_ratings.get(opp_team, 0.0)
+        bt_ability_diff = ref_bt - opp_bt
         
         # Actual decision: did ref team use PP this end?
         actual_decision = 1 if row["PPUsedThisEnd"] == 1 else 0
@@ -135,13 +135,13 @@ def evaluate_pp_decisions(
         wp_use_pp = pp_action_value(
             end, score_diff, hammer, ref_pp_avail, opp_pp_avail, 1,
             ep_model, differential_classes, class_to_diff, value_cache,
-            elo_diff, elo_bucket_size, score_diff_clip,
+            bt_ability_diff, bt_bucket_size, score_diff_clip,
             early_quit_model, None, None, None
         )
         wp_save_pp = pp_action_value(
             end, score_diff, hammer, ref_pp_avail, opp_pp_avail, 0,
             ep_model, differential_classes, class_to_diff, value_cache,
-            elo_diff, elo_bucket_size, score_diff_clip,
+            bt_ability_diff, bt_bucket_size, score_diff_clip,
             early_quit_model, None, None, None
         )
         
@@ -168,7 +168,7 @@ def evaluate_pp_decisions(
             "Hammer": hammer,
             "RefPPAvail": ref_pp_avail,
             "OppPPAvail": opp_pp_avail,
-            "EloDiff": elo_diff,
+            "BTAbilityDiff": bt_ability_diff,
             "ActualDecision": actual_decision,
             "OptimalDecision": optimal_decision,
             "ActualWP": actual_wp,
@@ -177,8 +177,8 @@ def evaluate_pp_decisions(
             "DecisionCorrect": 1 if actual_decision == optimal_decision else 0
         })
         
-        if (idx + 1) % 100 == 0:
-            print(f"  Processed {idx + 1:,} / {len(decision_points):,} decisions...")
+        if processed_count % 100 == 0:
+            print(f"  Processed {processed_count:,} / {len(decision_points):,} decisions...")
     
     return pd.DataFrame(results)
 
@@ -451,16 +451,16 @@ def main():
         print(f"  Warning: Could not train early quit model: {e}")
         early_quit_model = None
     
-    # Compute Elo ratings
-    print("  Computing Elo ratings...")
-    elo_ratings = compute_elo_ratings(games)
-    print(f"  Computed Elo ratings for {len(elo_ratings):,} teams")
+    # Compute ridge Bradley-Terry abilities
+    print("  Computing ridge Bradley-Terry abilities...")
+    bt_ratings = compute_bt_ratings(games)
+    print(f"  Computed BT abilities for {len(bt_ratings):,} teams")
     
     # Evaluate PP decisions
     print("Step 3: Evaluating PP decisions...")
     results_df = evaluate_pp_decisions(
         end_level_df, ep_model, differential_classes, class_to_diff,
-        early_quit_model, elo_ratings
+        early_quit_model, bt_ratings
     )
     print(f"  Evaluated {len(results_df):,} PP decision points")
     
@@ -513,4 +513,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

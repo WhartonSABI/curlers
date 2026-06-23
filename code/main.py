@@ -21,7 +21,7 @@ from ep_policy import (
     compute_pp_policy_heatmap,
     plot_pp_policy_heatmap,
     compute_pp_delta_ep,
-    test_elo_bucket_sizes
+    test_bt_bucket_sizes
 )
 from decisions import aggregate_decisions
 
@@ -96,7 +96,7 @@ def main():
         # Evaluate early quit model
         from sklearn.metrics import roc_auc_score, log_loss
         X_early_quit_val = early_quit_val_df[["EndID", "RefHasHammerStartOfEnd", "RefScoreDiffStartOfEnd", 
-                                               "RefPPAvailableBeforeEnd", "OppPPAvailableBeforeEnd", "RefEloDiff"]]
+                                               "RefPPAvailableBeforeEnd", "OppPPAvailableBeforeEnd", "RefBTAbilityDiff"]]
         y_early_quit_val = early_quit_val_df["EarlyQuit"]
         y_pred_proba = early_quit_model.predict_proba(X_early_quit_val)[:, 1]
         if len(np.unique(y_early_quit_val)) > 1:
@@ -134,9 +134,9 @@ def main():
     for idx, row in ep_feature_importance_df.head(5).iterrows():
         print(f"        {row['feature']}: {row['importance']:.4f}")
     
-    # Use fixed Elo bucket size
-    elo_bucket_size = 10.0
-    print(f"    Using fixed Elo bucket size: {elo_bucket_size}")
+    # Use fixed Bradley-Terry ability bucket size
+    bt_bucket_size = 0.1
+    print(f"    Using fixed BT ability bucket size: {bt_bucket_size}")
     
     # Compute optimal PP policy using DP
     # Two scenarios are computed:
@@ -148,8 +148,8 @@ def main():
     score_diff_clip = (-10, 10)
     pp_policy_df = compute_pp_policy_heatmap(
         ep_model, differential_classes, class_to_diff, 
-        score_range=(-5, 5), elo_diff=0.0, opp_pp_avail=1,
-        elo_bucket_size=elo_bucket_size,
+        score_range=(-5, 5), bt_ability_diff=0.0, opp_pp_avail=1,
+        bt_bucket_size=bt_bucket_size,
         score_diff_clip=score_diff_clip,
         early_quit_model=early_quit_model,
         extra_end_ep_model=None,  # Use regular EP model with EndsRemaining=0
@@ -167,8 +167,8 @@ def main():
     print("      Scenario 2: Opponent PP already used")
     pp_policy_df_opp_used = compute_pp_policy_heatmap(
         ep_model, differential_classes, class_to_diff,
-        score_range=(-5, 5), elo_diff=0.0, opp_pp_avail=0,
-        elo_bucket_size=elo_bucket_size,
+        score_range=(-5, 5), bt_ability_diff=0.0, opp_pp_avail=0,
+        bt_bucket_size=bt_bucket_size,
         score_diff_clip=score_diff_clip,
         early_quit_model=early_quit_model,
         extra_end_ep_model=None,  # Use regular EP model with EndsRemaining=0
@@ -216,6 +216,7 @@ def main():
         (os.path.join(results_dir, "pp_team_accuracy.png"), "pp_team_accuracy.png"),
         (os.path.join(results_dir, "pp_team_performance.png"), "pp_team_performance.png"),
         (os.path.join(eda_dir, "pp_usage_heatmap.png"), "pp_usage_heatmap.png"),
+        (os.path.join(eda_dir, "pp_decisions_bt_ability_distribution.png"), "pp_decisions_bt_ability_distribution.png"),
     ]
     for src, name in copies:
         dst = os.path.join(research_note_figures, name)
@@ -227,4 +228,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
